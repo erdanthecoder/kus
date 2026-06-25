@@ -1,0 +1,18 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { verifyToken } from '@/lib/auth'
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get('authorization')
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'No token' }, { status: 401 })
+  }
+  const payload = verifyToken(auth.slice(7))
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+  const users = await prisma.user.findMany({
+    select: { id: true, name: true, role: true, language: true, avatar: true, stars: true, housePoints: true },
+  })
+  return NextResponse.json(users)
+}
