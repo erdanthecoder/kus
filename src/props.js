@@ -97,6 +97,19 @@ export function treeGeometries() {
   return out;
 }
 
+// cheap far-LOD trees (same silhouettes, ~10x fewer triangles)
+export function treeGeometriesLow() {
+  const rnd = mulberry(12);
+  const t = (r0, r1, h, c) => colorize(new THREE.CylinderGeometry(r0, r1, h, 4).translate(0, h / 2, 0), c);
+  const crown = (g, col, y0, y1) => { softNormals(g, 0, (y0 + y1) / 2, 0); shadeCrown(g, col, y0, y1); return g; };
+  return [
+    merge([t(0.16, 0.26, 3.4, 0x5a4632), crown(blob(1, 1, rnd, 3.0, 2.3, 3.0).translate(0, 5.2, 0), 0x4c7a2e, 3, 7.5)]),
+    merge([t(0.15, 0.28, 3, 0x6a5a48), crown(blob(1, 1, rnd, 1.3, 7.5, 1.3).translate(0, 9.5, 0), 0x45722c, 3, 16)]),
+    merge([t(0.12, 0.22, 2, 0x4a3828), (() => { const g = merge([new THREE.ConeGeometry(2.4, 5, 6).translate(0, 3.6, 0), new THREE.ConeGeometry(1.5, 4, 6).translate(0, 6.6, 0)]); shadeCrown(g, 0x2f5a3c, 1, 9); return g; })()]),
+    merge([t(0.22, 0.38, 3.2, 0x4e3c2a), crown(blob(1, 1, rnd, 3.8, 2.8, 3.8).translate(0, 6, 0), 0x426e2a, 3, 9.5)]),
+  ];
+}
+
 export function lampGeometry() {
   const pole = colorize(new THREE.CylinderGeometry(0.07, 0.11, 8.5, 6).translate(0, 4.25, 0), 0x5a5e62);
   const arm = colorize(new THREE.BoxGeometry(0.08, 0.08, 2.2).translate(0, 8.4, -1.05), 0x5a5e62);

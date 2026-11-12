@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { CHUNK, LANE_W, mulberry, pointInPoly, ck } from './data.js';
 import { GB, ribbon, disc, hexColor, polyNormals, subPolyline, cumLen } from './geo.js';
 import { buildingMaterial, groundMaterial, markingMaterial, U } from './materials.js';
-import { treeGeometries, lampGeometry, lampGlowGeometry, busStopGeometry, benchGeometry } from './props.js';
+import { treeGeometries, treeGeometriesLow, lampGeometry, lampGlowGeometry, busStopGeometry, benchGeometry } from './props.js';
 
 const PAL = {
   house: [0xe8e2d4, 0xf0ead8, 0xd9c9a8, 0xb5654a, 0xc9bfae, 0xe6dcc0, 0xa8553e, 0xd8d0c8],
@@ -43,7 +43,7 @@ export class World {
       prop: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
       rail: new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.8 }),
     };
-    this.geoTrees = treeGeometries();
+    this.geoTrees = treeGeometries(); this.geoTreesLow = treeGeometriesLow();
     this.geoLamp = lampGeometry(); this.geoLampGlow = lampGlowGeometry();
     this.geoBus = busStopGeometry(); this.geoBench = benchGeometry();
     this.live = new Map();
@@ -104,7 +104,7 @@ export class World {
       if (d > R + 900) { this._dispose(k, L); continue; }
       L.group.visible = d < R + 300;
       if (L.detail) L.detail.visible = d < 650;
-      if (L.trees) L.trees.visible = d < 1100;
+      if (L.trees) { L.trees.visible = d < 280; L.treesLow.visible = d >= 280 && d < 1400; }
       if (L.marks) L.marks.visible = d < 700;
     }
   }
@@ -243,7 +243,7 @@ export class World {
       }
     }
     for (const t of c.trees) treePts[rnd() < 0.5 ? 0 : 3].push(t[0], t[1], 0.8 + rnd() * 0.4, rnd() * 6.28);
-    const tg = new THREE.Group();
+    const tg = new THREE.Group(), tgLow = new THREE.Group();
     const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), AX = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
     for (let t = 0; t < 4; t++) {
@@ -261,8 +261,12 @@ export class World {
       im.castShadow = true; im.receiveShadow = true;
       im.computeBoundingSphere();
       tg.add(im);
+      const lo = new THREE.InstancedMesh(this.geoTreesLow[t], this.mat.tree, n);
+      lo.instanceMatrix.copy(im.instanceMatrix); lo.instanceColor = im.instanceColor;
+      lo.castShadow = true; lo.computeBoundingSphere();
+      tgLow.add(lo);
     }
-    group.add(tg); L.trees = tg;
+    group.add(tg, tgLow); L.trees = tg; L.treesLow = tgLow;
     if (lamps.length) {
       const n = lamps.length / 3;
       const im = new THREE.InstancedMesh(this.geoLamp, this.mat.lamp, n);

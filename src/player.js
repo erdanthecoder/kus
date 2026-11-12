@@ -209,6 +209,7 @@ export class PlayerCar {
     const u = Math.max(0, this.u || 0);
     const ratios = [0, 3.6, 2.2, 1.55, 1.18, 0.95, 0.78];
     const fin = 3.6, wr = this.spec.wr;
+    if (!(this.gear >= 1)) this.gear = 1;
     let rpm = u / wr * ratios[this.gear] * fin * 60 / (2 * Math.PI);
     if (rpm > 6300 && this.gear < 6) this.gear++;
     if (rpm < 2400 && this.gear > 1) this.gear--;
