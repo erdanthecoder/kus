@@ -267,6 +267,7 @@ async function boot() {
     fade(true); await sleep(700);
     S.flight = airport.createScenicFlight();
     S.mode = 'flight'; S.flightCam = 0;
+    airport.scenicCamera(S.flight, 0, camTarget, camLook); camera.position.copy(camTarget); lookSm.copy(camLook);
     world.radius = 2600;
     scene.fog.far = 9000; camera.far = 12000; camera.updateProjectionMatrix();
     car.group.visible = true;
@@ -291,6 +292,7 @@ async function boot() {
     let pl = airport.planes.find(p => p.state === 'approach' || p.state === 'flare');
     if (!pl) { pl = airport._newPlane(); airport._startApproach(pl, 0.45); }
     S.spot = { pl, cam: new THREE.Vector3(airport.spotter.x, 2.2, airport.spotter.y) };
+    lookSm.set(pl.x, pl.y, pl.z);
     hud.toast('Plane spotting – watch the landing. [Esc] to exit', 3);
   }
   function endSpot() { S.mode = 'drive'; S.spot = null; }
