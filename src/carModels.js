@@ -4,14 +4,50 @@
 import * as THREE from 'three';
 import { colorize, merge } from './props.js';
 
-function extrudeProfile(points, width, bevel = 0.05) {
+// Profile (side view) -> rounded body: corners of the polygon are filleted, the extrusion is
+// subdivided across the width, then the body is tapered in plan view and given tumblehome so it
+// reads as a car rather than a box.
+function filletPoly(points, r) {
+  const out = [];
+  const n = points.length;
+  for (let i = 0; i < n; i++) {
+    const p = points[i], a = points[(i - 1 + n) % n], b = points[(i + 1) % n];
+    const v1 = [a[0] - p[0], a[1] - p[1]], v2 = [b[0] - p[0], b[1] - p[1]];
+    const l1 = Math.hypot(...v1), l2 = Math.hypot(...v2);
+    const rr = Math.min(r, l1 * 0.45, l2 * 0.45);
+    const flat = p[1] < 0.5 && (a[1] < 0.5 || b[1] < 0.5); // keep the underbody corners sharp
+    if (flat || rr < 0.01) { out.push(p); continue; }
+    const s0 = [p[0] + v1[0] / l1 * rr, p[1] + v1[1] / l1 * rr], s1 = [p[0] + v2[0] / l2 * rr, p[1] + v2[1] / l2 * rr];
+    for (let k = 0; k <= 4; k++) {
+      const t = k / 4, it = 1 - t;
+      out.push([it * it * s0[0] + 2 * it * t * p[0] + t * t * s1[0], it * it * s0[1] + 2 * it * t * p[1] + t * t * s1[1]]);
+    }
+  }
+  return out;
+}
+function extrudeProfile(points, width, bevel = 0.05, opts = {}) {
+  const pts = opts.fillet ? filletPoly(points, opts.fillet) : points;
   const s = new THREE.Shape();
-  s.moveTo(points[0][0], points[0][1]);
-  for (let i = 1; i < points.length; i++) s.lineTo(points[i][0], points[i][1]);
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
   s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, { depth: width - bevel * 2, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 1 });
+  const g = new THREE.ExtrudeGeometry(s, { depth: width - bevel * 2, steps: opts.steps || 1, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 1 });
   g.rotateY(-Math.PI / 2);
   g.translate((width - bevel * 2) / 2, 0, 0);
+  if (opts.shape) {
+    const { L, W, belt, top, taper = 0.12, tumble = 0.14 } = opts.shape;
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      let x = p.getX(i); const y = p.getY(i), z = p.getZ(i);
+      const zn = Math.min(1, Math.abs(z) / (L / 2));
+      let k = 1 - taper * Math.pow(zn, 3);                                   // plan-view taper at nose/tail
+      if (y > belt) k *= 1 - tumble * Math.min(1, (y - belt) / Math.max(0.1, top - belt)); // tumblehome
+      // crowned panels: slightly rounder in the middle of the width
+      p.setX(i, x * k);
+      if (Math.abs(x) > W * 0.3 && y > belt * 0.7) p.setY(i, y - 0.02 * Math.pow(Math.abs(x) / (W / 2), 4));
+    }
+    g.computeVertexNormals();
+  }
   return g;
 }
 const box = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
@@ -91,10 +127,25 @@ export function buildVehicle(typeName, opts = {}) {
   const T = VEHICLE_TYPES[typeName];
   const paint = [], detail = [], lights = [];
   const W = T.W;
-  paint.push(extrudeProfile(T.body, W, 0.1));
+  const belt = T.cabin[0][1], top = T.roof[2][1];
+  const boxy = typeName === 'bus' || typeName === 'truck';
+  const shp = boxy ? null : { L: T.L, W, belt: belt * 0.75, top, taper: typeName === 'van' ? 0.06 : 0.13, tumble: 0.05 };
+  paint.push(extrudeProfile(T.body, W, 0.08, { fillet: boxy ? 0.08 : 0.22, steps: 4, shape: shp }));
   const cw = W * T.cabinW;
-  detail.push(colorize(extrudeProfile(T.cabin, cw, 0.04), GLASS));
-  paint.push(extrudeProfile(T.roof, cw + 0.03, 0.02));
+  const shpC = boxy ? null : { L: T.L, W: cw, belt, top, taper: 0.1, tumble: typeName === 'van' ? 0.05 : 0.2 };
+  detail.push(colorize(extrudeProfile(T.cabin, cw, 0.04, { fillet: boxy ? 0.05 : 0.12, steps: 3, shape: shpC }), GLASS));
+  paint.push(extrudeProfile(T.roof, cw + 0.03, 0.02, { fillet: 0.04, steps: 2, shape: shpC && { ...shpC, W: cw + 0.03 } }));
+  // dark wheel-arch liners so the wheels sit in proper arches
+  if (!boxy) for (const [x, y, z] of wheelPositions(T)) {
+    const arch = new THREE.CylinderGeometry(T.wr * 1.18, T.wr * 1.18, 0.06, 18, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2);
+    detail.push(colorize(arch.translate(Math.sign(x) * (W / 2 - 0.02), y, z), 0x0a0a0a));
+  }
+  // door lines & side trim
+  if (!boxy) for (const s of [-1, 1]) {
+    detail.push(colorize(box(0.012, belt - T.body[0][1] - 0.15, 0.02, s * (W / 2 + 0.003), (belt + T.body[0][1]) / 2, T.cabin[T.cabin.length - 2][0] - 0.1), 0x111111));
+    detail.push(colorize(box(0.012, belt - T.body[0][1] - 0.15, 0.02, s * (W / 2 + 0.003), (belt + T.body[0][1]) / 2, (T.cabin[0][0] + T.cabin[1][0]) / 2 + 0.2), 0x111111));
+    detail.push(colorize(box(0.02, 0.05, T.L * 0.5, s * (W / 2 + 0.005), belt - 0.03, 0), 0x9aa0a6));
+  }
   if (T.cargo) {
     const [z0, z1, y0, y1] = T.cargo;
     paint.push(box(W, y1 - y0, z1 - z0, 0, (y0 + y1) / 2, (z0 + z1) / 2));

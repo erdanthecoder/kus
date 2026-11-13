@@ -1,10 +1,10 @@
-// Bishkek Drive – entry point: boot, input, main loop, menus, airport interaction.
+// BskDrive – entry point: boot, settings, input, main loop, menus, jobs, multiplayer, airport.
 import * as THREE from 'three';
 import { MapData } from './data.js';
 import { makeTextures, U } from './materials.js';
 import { World } from './world.js';
 import { Environment } from './sky.js';
-import { PlayerCar, CameraRig, CAR_CHOICES } from './player.js';
+import { PlayerCar, CameraRig } from './player.js';
 import { Traffic } from './traffic.js';
 import { Pedestrians } from './peds.js';
 import { Airport } from './airport.js';
@@ -12,10 +12,44 @@ import { Landmarks } from './landmarks.js';
 import { Audio } from './audio.js';
 import { HUD } from './hud.js';
 import { Game, PLACES, fmt } from './game.js';
+import { Jobs, JOBS } from './jobs.js';
+import { Net } from './net.js';
+import { PostFX } from './postfx.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const COLORS = [0xf0f0f0, 0x111214, 0x8c9096, 0xc01818, 0x1a3a7a, 0x2a6a3a, 0xf2c200, 0x6a1a3a, 0xd87a20, 0x40a8d8];
+const COLORS = [0xf0f0f0, 0x111214, 0x8c9096, 0x5a6066, 0xc01818, 0x1a3a7a, 0x2a6a3a, 0xf2c200, 0x6a1a3a, 0xd87a20, 0x40a8d8, 0xc8b89a];
+const CARS = [
+  { id: 'sedan', name: 'Sedan', desc: 'The classic white Bishkek sedan. 165 hp', price: 0 },
+  { id: 'oldsedan', name: 'Old Classic', desc: 'Boxy Soviet-era legend. 75 hp', price: 2500 },
+  { id: 'hatch', name: 'City Hatch', desc: 'Small Japanese import. Nimble. 110 hp', price: 6000 },
+  { id: 'van', name: 'Marshrutka', desc: 'Your own white minibus. 160 hp', price: 12000 },
+  { id: 'suv', name: 'Land SUV', desc: 'Big 4x4 – rules the potholes. 280 hp', price: 25000 },
+  { id: 'coupe', name: 'Sport Coupe', desc: '420 hp. Mind the 150 km/h cameras!', price: 60000 },
+];
+const PRESETS = {
+  low: { scale: 0.7, view: 900, shadows: false, bloom: false, msaa: false },
+  medium: { scale: 1, view: 1250, shadows: true, bloom: true, msaa: false },
+  high: { scale: 1.25, view: 1600, shadows: true, bloom: true, msaa: true },
+  ultra: { scale: 1.6, view: 2200, shadows: true, bloom: true, msaa: true },
+};
+const DEFAULTS = {
+  preset: 'medium', traffic: 1, peds: 1, sens: 1, abs: true, tcs: true, esc: true, steerAssist: true, manual: false,
+  fov: 62, vol: 0.7, minimap: true, timeSpeed: 1, mp: true, name: '', shake: true, ...PRESETS.medium,
+};
+
+function loadSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem('bd_settings2') || '{}'); } catch (e) { /* ignore */ }
+  if (!s.preset) {
+    const cores = navigator.hardwareConcurrency || 4, mobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    const q = new URLSearchParams(location.search).get('q');
+    s.preset = q || (mobile ? 'low' : cores >= 8 ? 'high' : 'medium');
+    Object.assign(s, PRESETS[s.preset]);
+  }
+  return Object.assign({}, DEFAULTS, PRESETS[s.preset] || {}, s);
+}
+function saveSettings(s) { try { localStorage.setItem('bd_settings2', JSON.stringify(s)); } catch (e) { /* ignore */ } }
 
 async function boot() {
   const prog = (t, p) => { $('loadText').textContent = t; $('loadBar').style.width = (p * 100).toFixed(0) + '%'; };
@@ -23,29 +57,28 @@ async function boot() {
   if (!window.BISHKEK_DATA) { $('loadText').textContent = 'Map data missing (data/bishkek-data.js)'; return; }
   const map = new MapData(window.BISHKEK_DATA);
   window.BISHKEK_DATA = null;
-  prog(`Road graph: ${map.edges.length.toLocaleString()} street segments, ${map.signalClusters.length} signalised junctions`, 0.25); await sleep(30);
+  prog(`${map.buildings.length.toLocaleString()} buildings · ${map.edges.length.toLocaleString()} streets · ${map.signalClusters.length} traffic lights`, 0.25); await sleep(30);
 
-  const quality = localStorage.getItem('bd_quality') || (navigator.hardwareConcurrency >= 8 ? 'high' : 'medium');
-  const renderer = new THREE.WebGLRenderer({ antialias: quality !== 'low', powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 1.5 : quality === 'medium' ? 1 : 0.75));
+  const settings = loadSettings();
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const applyScale = () => renderer.setPixelRatio(Math.min(window.devicePixelRatio * settings.scale, 2) * (window.devicePixelRatio >= 2 ? 0.75 : 1) || 1);
+  applyScale();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
-  renderer.shadowMap.enabled = quality !== 'low';
+  renderer.toneMappingExposure = 0.95;
+  renderer.shadowMap.enabled = settings.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.autoClear = false;
   $('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 4200);
+  const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.5, 4200);
   const env = new Environment(renderer, scene);
-  if (quality === 'medium') env.sun.shadow.mapSize.set(1536, 1536);
+  env.sun.shadow.mapSize.set(settings.preset === 'ultra' ? 4096 : settings.preset === 'high' ? 2048 : 1536, settings.preset === 'ultra' ? 4096 : settings.preset === 'high' ? 2048 : 1536);
   const T = makeTextures();
   prog('Building Bishkek…', 0.35); await sleep(20);
   const world = new World(scene, map, T);
-  world.radius = quality === 'high' ? 1600 : quality === 'medium' ? 1250 : 900;
-  // layered ground surfaces: polygon offset prevents distant z-fighting
   for (const k of ['grass', 'dirt', 'field', 'asphalt', 'concrete', 'water']) Object.assign(world.mat[k], { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   Object.assign(world.mat.paving, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -3 });
   Object.assign(world.mat.road, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -5 });
@@ -54,58 +87,86 @@ async function boot() {
   const hud = new HUD(map);
   const audio = new Audio();
   const game = new Game(map, hud, audio);
+  if (!game.owned) game.owned = ['sedan'];
   const airport = new Airport(scene, map, world);
   game.setAirport(airport);
   prog('Landmarks: Ala-Too Square, Victory Square, Central Mosque…', 0.45); await sleep(20);
   const landmarks = new Landmarks(scene, map, world);
 
-  // ---- start position: Chuy Avenue in front of Ala-Too Square
+  // ---- start: Chuy Avenue in front of Ala-Too Square
   const start = map.nearestRoad(40, 55, 120, e => e.cls <= 2) || map.nearestRoad(0, 0, 500);
-  const car = new PlayerCar(scene, game.savedCar || 'sedan', game.savedColor);
+  const car = new PlayerCar(scene, game.owned.includes(game.savedCar) ? game.savedCar : 'sedan', game.savedColor);
+  game.homeCar = car.type; game.homeColor = car.color;
   const sx = start.x - start.dz * map.laneOffset(start.e, 0), sz = start.z + start.dx * map.laneOffset(start.e, 0);
   car.place(sx, sz, Math.atan2(start.dx, start.dz));
-  const startPos = { x: sx, z: sz, h: car.h };
+  const startPos = { x: sx, z: sz };
 
-  // pre-build the world around the start
   prog('Streets, buildings and parks around Ala-Too Square…', 0.5);
-  world.radius = Math.min(world.radius, 900);
-  for (let i = 0; i < 20; i++) { world.update({ x: car.x, z: car.z }, 0, false); prog('Streets, buildings and parks around Ala-Too Square…', 0.5 + i * 0.02); await sleep(1); }
-  world.radius = quality === 'high' ? 1600 : quality === 'medium' ? 1250 : 900;
-  const baseRadius = world.radius;
+  world.radius = 500; world.update({ x: car.x, z: car.z }, 0, true);
+  world.radius = Math.min(settings.view, 900);
+  for (let i = 0; i < 15; i++) { world.update({ x: car.x, z: car.z }, 0, false); prog('Streets, buildings, trees and shop signs…', 0.55 + i * 0.025); await sleep(1); }
+  world.radius = settings.view;
 
   prog('Traffic, traffic lights and people…', 0.92); await sleep(20);
   const traffic = new Traffic(scene, map, world);
   const peds = new Pedestrians(scene, map);
   peds.addZone({ name: 'Manas Airport', x: airport.dropoff.x + airport.n.x * 18, z: airport.dropoff.y + airport.n.y * -18, r: 45, n: 40, bags: true });
-  const settings = { traffic: 1, peds: 1, timeSpeed: 1, sens: 1 };
-  try { Object.assign(settings, JSON.parse(localStorage.getItem('bd_settings') || '{}')); } catch (e) { /* ignore */ }
-  traffic.target = Math.round(260 * settings.traffic * (quality === 'low' ? 0.6 : 1));
-  peds.target = Math.round(220 * settings.peds * (quality === 'low' ? 0.6 : 1));
+  const jobs = new Jobs(map, game, hud, audio, peds);
+  jobs.completed = game.jobsDone || 0;
+  const net = new Net(scene);
+  car.remotes = net;
   const rig = new CameraRig(camera);
-  rig.pos.set(car.x - Math.sin(car.h) * 8, 3, car.z - Math.cos(car.h) * 8);
+  rig.snap(car);
+  let post = null;
+  const buildPost = () => { post = (settings.bloom || settings.msaa) ? new PostFX(renderer, env, scene, camera, { bloom: settings.bloom, msaa: settings.msaa }) : null; };
+  buildPost();
 
-  // ---------------------------------------------------------------- state
   const S = {
     mode: 'menu', hour: 8.4, paused: true, flight: null, flightCam: 0, spot: null,
-    keys: {}, steer: 0, mapOpen: false, photoCbs: [], lastSave: 0, time: 0, mouseYaw: 0,
+    keys: {}, steer: 0, thr: 0, mapOpen: false, photoCbs: [], lastSave: 0, time: 0, mouseYaw: 0, hud: true, chatOpen: false,
   };
-  window.__bd = { teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, S, scene, camera, renderer, env };
+
+  function applySettings() {
+    traffic.target = Math.round(260 * settings.traffic);
+    peds.target = Math.round(220 * settings.peds);
+    car.assists = { abs: settings.abs, tcs: settings.tcs, esc: settings.esc, steerAssist: settings.steerAssist, sens: settings.sens, manual: settings.manual };
+    audio.setVolume(settings.vol);
+    world.radius = settings.view;
+    camera.fov = settings.fov;
+    $('hudRoot').classList.toggle('nomini', !settings.minimap);
+    saveSettings(settings);
+  }
+  applySettings();
+  window.__bd = { teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
+
+  // ---------------------------------------------------------------- vehicles
+  function setCar(type, color, isHome) {
+    car.setType(type, color ?? car.color);
+    car.assists && (car.assists = { ...car.assists });
+    if (isHome) { game.homeCar = type; game.homeColor = color ?? car.color; }
+    rig.snap(car);
+  }
 
   // ---------------------------------------------------------------- input
   const touch = { steer: 0, gas: 0, brake: 0, hand: false };
+  const DRIVE_KEYS = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
   window.addEventListener('keydown', (e) => {
-    if (e.repeat && !['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) return;
+    if (S.chatOpen) return;
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+    if (e.code === 'Tab') { e.preventDefault(); if (S.mode !== 'menu') showOnline(true); return; }
+    if (e.code === 'F1') e.preventDefault();
+    if (e.repeat && !DRIVE_KEYS.includes(e.code)) return;
     S.keys[e.code] = true;
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    if (DRIVE_KEYS.includes(e.code)) e.preventDefault();
     onKey(e.code);
   });
-  window.addEventListener('keyup', (e) => { S.keys[e.code] = false; });
+  window.addEventListener('keyup', (e) => { S.keys[e.code] = false; if (e.code === 'Tab' && S.tabOnline) showOnline(false); });
   window.addEventListener('blur', () => { S.keys = {}; });
 
   function onKey(code) {
     audio.start();
-    if (S.mode === 'menu') return;
-    if (code === 'Escape' || code === 'KeyP') {
+    if (S.mode === 'menu') { if (code === 'Enter') $('startBtn').click(); return; }
+    if (code === 'Escape') {
       if (S.mapOpen) return toggleMap(false);
       if (!$('airportMenu').classList.contains('hidden')) return $('airportMenu').classList.add('hidden');
       if (S.mode === 'flight') return endFlight(true);
@@ -114,26 +175,23 @@ async function boot() {
     }
     if (S.paused) return;
     switch (code) {
-      case 'KeyC':
-        if (S.mode === 'flight') { S.flightCam = (S.flightCam + 1) % 4; }
-        else hud.toast('Camera: ' + rig.cycle(), 1.2);
-        break;
+      case 'KeyC': if (S.mode === 'flight') S.flightCam = (S.flightCam + 1) % 4; else hud.toast('Camera: ' + rig.cycle(), 1.2); break;
       case 'KeyM': toggleMap(); break;
-      case 'KeyH': audio.horn(0.3, 0.45); peds.list.forEach(p => { if (Math.hypot(p.x - car.x, p.z - car.z) < 15 && p.mode === 'walk') { p.dodge = 0.5; p.dside = Math.random() < 0.5 ? 1 : -1; } }); break;
+      case 'KeyH': audio.horn(0.3, 0.45); peds.list.forEach(p => { if (!p.fixed && Math.hypot(p.x - car.x, p.z - car.z) < 15 && p.mode === 'walk') { p.dodge = 0.5; p.dside = Math.random() < 0.5 ? 1 : -1; } }); break;
       case 'KeyE': interact(); break;
-      case 'KeyJ':
-        if (game.mission) { game.cancelMission(peds); hud.toast('Taxi job cancelled', 2); }
-        else if (game.startTaxi(car, peds)) hud.toast(`🚕 New taxi order: pick up <b>${game.mission.passenger}</b> (follow the blue GPS line)`, 4);
-        break;
+      case 'KeyJ': togglePause(true, 'pJobs'); break;
       case 'KeyR': resetCar(); break;
-      case 'BracketRight': S.hour = (S.hour + 1) % 24; hud.toast('Time ' + hud.clockText(), 1); break;
-      case 'BracketLeft': S.hour = (S.hour + 23) % 24; hud.toast('Time ' + hud.clockText(), 1); break;
-      case 'KeyG': if (game.routeTarget && !game.mission) { game.clearRoute(); hud.toast('GPS cleared', 1.5); } break;
+      case 'KeyG': if (game.routeTarget && !jobs.active) { game.clearRoute(); hud.toast('GPS cleared', 1.2); } break;
       case 'KeyK': hud.toast(audio.toggleMute() ? 'Sound off' : 'Sound on', 1.2); break;
+      case 'BracketRight': S.hour = (S.hour + 1) % 24; hud.toast(hud.clockText(), 0.8); break;
+      case 'BracketLeft': S.hour = (S.hour + 23) % 24; hud.toast(hud.clockText(), 0.8); break;
+      case 'ShiftLeft': case 'ShiftRight': if (settings.manual) car.shiftUp(); break;
+      case 'ControlLeft': case 'ControlRight': if (settings.manual) car.shiftDown(); break;
+      case 'F1': S.hud = !S.hud; $('hudRoot').classList.toggle('off', !S.hud); break;
+      case 'Enter': if (settings.mp) openChat(); break;
     }
   }
 
-  // mouse look (hold right button to orbit camera)
   let rmb = false;
   renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
   renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) rmb = true; audio.start(); });
@@ -144,30 +202,62 @@ async function boot() {
     const r = map.nearestRoad(car.x, car.z, 300, e => e.cls <= 4);
     if (!r) return;
     const off = map.laneOffset(r.e, 0);
-    const fx = Math.sin(car.h), fz = Math.cos(car.h);
     let dx = r.dx, dz = r.dz;
-    if (!r.e.ow && fx * dx + fz * dz < 0) { dx = -dx; dz = -dz; }
+    if (!r.e.ow && Math.sin(car.h) * dx + Math.cos(car.h) * dz < 0) { dx = -dx; dz = -dz; }
     car.place(r.x - dz * off, r.z + dx * off, Math.atan2(dx, dz));
-    hud.toast('Car reset to the road', 1.5);
+    hud.toast('Car reset', 1);
   }
-
   function teleport(x, z) {
     const r = map.nearestRoad(x, z, 400, e => e.cls <= 4);
     if (!r) return;
     const off = map.laneOffset(r.e, 0);
     car.place(r.x - r.dz * off, r.z + r.dx * off, Math.atan2(r.dx, r.dz));
     traffic.clear(); for (const t in traffic.models) traffic.models[t].n = 0;
-    peds.list.length = 0; for (const z2 of peds.extraZones) z2.count = 0;
+    peds.list = peds.list.filter(p => p.fixed); for (const z2 of peds.extraZones) z2.count = 0;
     rig.snap(car);
     for (let i = 0; i < 6; i++) world.update({ x: car.x, z: car.z }, 0, true);
   }
 
+  // ---------------------------------------------------------------- chat
+  const chatLines = [];
+  function addChat(name, text, mine) {
+    const el = document.createElement('div');
+    el.innerHTML = `<b>${esc(name)}</b> ${esc(text)}`;
+    if (mine) el.style.opacity = '0.85';
+    $('chat').appendChild(el); chatLines.push(el);
+    while (chatLines.length > 6) chatLines.shift().remove();
+    setTimeout(() => { el.style.opacity = '0'; }, 9000);
+    setTimeout(() => el.remove(), 10500);
+    if (!mine) audio.blip(700, 0.04, 0.06);
+  }
+  net.onChat = addChat;
+  net.onJoin = (n) => addChat('●', `${n} is driving in Bishkek`, true);
+  function openChat() {
+    if (!net.enabled) return;
+    S.chatOpen = true; S.keys = {};
+    const i = $('chatInput'); i.classList.remove('hidden'); i.value = ''; i.focus();
+  }
+  $('chatInput').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { net.chat(e.target.value); closeChat(); }
+    if (e.key === 'Escape') closeChat();
+  });
+  function closeChat() { S.chatOpen = false; $('chatInput').classList.add('hidden'); $('chatInput').blur(); }
+
   // ---------------------------------------------------------------- menus
-  function togglePause(force) {
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => openTab(t.dataset.p));
+  function openTab(id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.p === id));
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === id));
+    if (id === 'pJobs') renderJobs(); if (id === 'pGarage') renderGarage(); if (id === 'pOnline') renderOnline(); if (id === 'pPlaces') renderPlaces(); if (id === 'pSettings') renderSettings();
+  }
+  function togglePause(force, tab) {
     S.paused = force !== undefined ? force : !S.paused;
     $('pause').classList.toggle('hidden', !S.paused);
-    if (S.paused) { renderFines(); renderPlaces(); }
+    if (S.paused) openTab(tab || 'pJobs');
+    S.keys = {};
   }
+  $('resume').onclick = () => togglePause(false);
   function toggleMap(force) {
     S.mapOpen = force !== undefined ? force : !S.mapOpen;
     $('mapPanel').classList.toggle('hidden', !S.mapOpen);
@@ -175,117 +265,165 @@ async function boot() {
   }
   hud.onMapClick = (x, z, shift) => {
     if (shift) { teleport(x, z); toggleMap(false); return; }
-    game.setRoute(x, z, 'Waypoint'); hud.toast('GPS route set (G to clear)', 1.5);
+    game.setRoute(x, z, 'Waypoint'); hud.toast('GPS route set', 1.2);
   };
   $('mapClose').onclick = () => toggleMap(false);
 
-  function renderFines() {
-    const el = $('fineList');
-    if (!game.fines.length) { el.innerHTML = '<p class="muted">No fines yet. Stay under 150 km/h, stop at red lights and keep off the runway!</p>'; return; }
-    el.innerHTML = game.fines.slice(-12).reverse().map(f => `<div class="fineRow"><b>${f.kind}</b> <span>−${fmt(f.amount)} сом</span><small>${f.time} · ${f.detail}</small></div>`).join('');
+  function renderJobs() {
+    $('jobCards').innerHTML = Object.entries(JOBS).map(([id, j]) => `<button class="card ${jobs.active?.type === id ? 'sel' : ''}" data-id="${id}"><div class="ic">${j.icon}</div><b>${j.name}</b><small>${j.desc}</small></button>`).join('');
+    $('jobCards').querySelectorAll('button').forEach(b => b.onclick = () => {
+      if (S.mode !== 'drive') return;
+      togglePause(false);
+      if (jobs.active?.type === b.dataset.id) { jobs.stop(car, setCar); return; }
+      jobs.start(b.dataset.id, car, scene, setCar);
+    });
+    $('jobNow').innerHTML = jobs.active ? `On shift: <b>${jobs.status(car)}</b> · <a href="#" id="endShift" style="color:#3fc8ff">end shift</a>` : `${jobs.completed} jobs done · balance <b>${fmt(game.money)} coins</b>`;
+    const es = $('endShift'); if (es) es.onclick = (e) => { e.preventDefault(); jobs.stop(car, setCar); renderJobs(); };
+  }
+  function renderGarage() {
+    $('garage').innerHTML = CARS.map(c => {
+      const own = game.owned.includes(c.id);
+      return `<button class="card ${car.type === c.id ? 'sel' : ''} ${own ? '' : 'locked'}" data-id="${c.id}"><b>${c.name}</b><small>${c.desc}</small><div class="price">${own ? (car.type === c.id ? 'Driving' : 'Owned') : '🪙 ' + fmt(c.price)}</div></button>`;
+    }).join('');
+    $('garage').querySelectorAll('button').forEach(b => b.onclick = () => {
+      const c = CARS.find(q => q.id === b.dataset.id);
+      if (jobs.active && (jobs.active.type === 'bus' || jobs.active.type === 'marshrutka')) { hud.toast('Finish your route first', 1.5); return; }
+      if (!game.owned.includes(c.id)) {
+        if (game.money < c.price) { hud.toast(`Not enough coins (${fmt(c.price)} needed)`, 1.6); return; }
+        game.money -= c.price; game.owned.push(c.id); audio.cash();
+      }
+      setCar(c.id, car.color, true); game.save(car); renderGarage();
+    });
+    $('colors').innerHTML = COLORS.map(c => `<button class="sw" style="background:#${c.toString(16).padStart(6, '0')}" data-c="${c}"></button>`).join('');
+    $('colors').querySelectorAll('button').forEach(b => b.onclick = () => { car.setColor(+b.dataset.c); game.homeColor = +b.dataset.c; game.save(car); });
+  }
+  function renderOnline() {
+    $('netStatus').innerHTML = !settings.mp ? 'Multiplayer is off (Settings → Online).' : net.status === 'online' ? `<span class="dot on"></span> Connected · ${net.players.size + 1} drivers in Bishkek right now` : `Connecting… (${net.status})`;
+    const rows = [{ name: net.name || settings.name || 'You', money: game.money, job: jobs.active ? JOBS[jobs.active.type].icon : '', car: car.type, me: true }].concat(net.list());
+    rows.sort((a, b) => b.money - a.money);
+    $('lb').innerHTML = '<tr><th>#</th><th>Driver</th><th>Coins</th><th>Now</th></tr>' + rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td>${fmt(r.money)}</td><td>${r.job || (CARS.find(c => c.id === r.car)?.name || '')}</td></tr>`).join('');
+  }
+  function showOnline(on) {
+    S.tabOnline = on;
+    if (on) { renderOnline(); $('pause').classList.remove('hidden'); openTab('pOnline'); }
+    else if (!S.paused) $('pause').classList.add('hidden');
   }
   function renderPlaces() {
-    $('placeList').innerHTML = PLACES.map(p => `<button class="place ${game.visited.has(p.id) ? 'done' : ''}" data-id="${p.id}">${game.visited.has(p.id) ? '✔' : '○'} ${p.name}<small>${p.local || ''}</small></button>`).join('');
-    $('placeList').querySelectorAll('button').forEach(b => b.onclick = () => {
-      const p = PLACES.find(q => q.id === b.dataset.id);
-      teleport(p.x, p.z); togglePause(false);
-    });
-    $('placeCount').textContent = `${game.visited.size}/${PLACES.length}`;
+    $('placeCount').textContent = `${game.visited.size}/${PLACES.length} landmarks discovered · click to travel`;
+    $('placeList').innerHTML = PLACES.map(p => `<button class="place ${game.visited.has(p.id) ? 'done' : ''}" data-id="${p.id}"><span>${game.visited.has(p.id) ? '✔' : '○'} ${p.name}</span><small>${p.local || ''}</small></button>`).join('');
+    $('placeList').querySelectorAll('button').forEach(b => b.onclick = () => { const p = PLACES.find(q => q.id === b.dataset.id); teleport(p.x, p.z); togglePause(false); });
+    $('fineList').innerHTML = game.fines.length ? game.fines.slice(-10).reverse().map(f => `<div class="row"><span>${f.kind}<br><small class="muted">${f.time} · ${esc(f.detail)}</small></span><b style="color:#ff8a80">−${fmt(f.amount)}</b></div>`).join('') : '<p class="muted">No fines. Keep it under 150 km/h!</p>';
   }
-  function renderGarage(target) {
-    target.innerHTML = CAR_CHOICES.map(c => `<button class="carCard ${car.type === c.id ? 'sel' : ''}" data-id="${c.id}"><b>${c.name}</b><small>${c.desc}</small></button>`).join('');
-    target.querySelectorAll('button').forEach(b => b.onclick = () => {
-      const c = CAR_CHOICES.find(q => q.id === b.dataset.id);
-      car.setType(c.id, car.color ?? c.color);
-      renderGarage(target);
-      game.save(car);
-    });
-  }
-  function renderColors(target) {
-    target.innerHTML = COLORS.map(c => `<button class="sw" style="background:#${c.toString(16).padStart(6, '0')}" data-c="${c}"></button>`).join('');
-    target.querySelectorAll('button').forEach(b => b.onclick = () => { car.setColor(+b.dataset.c); game.save(car); });
-  }
-  renderGarage($('garage')); renderColors($('colors'));
-  renderGarage($('garage2')); renderColors($('colors2'));
-  const bindRange = (id, key, fn) => { const el = $(id); el.value = settings[key]; el.oninput = () => { settings[key] = +el.value; fn && fn(); localStorage.setItem('bd_settings', JSON.stringify(settings)); }; };
-  bindRange('setTraffic', 'traffic', () => traffic.target = Math.round(260 * settings.traffic));
-  bindRange('setPeds', 'peds', () => peds.target = Math.round(220 * settings.peds));
-  bindRange('setTimeSpeed', 'timeSpeed');
-  const vol = $('setVol'); vol.oninput = () => audio.setVolume(+vol.value);
-  $('setQuality').value = quality;
-  $('setQuality').onchange = () => { localStorage.setItem('bd_quality', $('setQuality').value); location.reload(); };
-  $('resume').onclick = () => togglePause(false);
-  $('resetBtn').onclick = () => { teleport(startPos.x, startPos.z); togglePause(false); };
-  $('clearSave').onclick = () => { localStorage.removeItem('bishkekDrive'); location.reload(); };
 
+  // settings page
+  function renderSettings() {
+    const tog = (k, label) => `<div class="row"><label>${label}</label><button class="tog ${settings[k] ? 'on' : ''}" data-k="${k}"></button></div>`;
+    const rng = (k, label, min, max, step, fmtv = (v) => v) => `<div class="row"><label>${label} <small class="muted" id="v_${k}">${fmtv(settings[k])}</small></label><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${settings[k]}"></div>`;
+    const sel = (k, label, opts) => `<div class="row"><label>${label}</label><select data-k="${k}">${opts.map(([v, t]) => `<option value="${v}" ${String(settings[k]) === String(v) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+    $('settingsBox').innerHTML = `<div class="set"><div>
+      <h4>Graphics</h4>
+      ${sel('preset', 'Quality preset', [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra'], ['custom', 'Custom']])}
+      ${rng('scale', 'Resolution', 0.5, 2, 0.05, v => Math.round(v * 100) + '%')}
+      ${rng('view', 'View distance', 600, 2600, 100, v => v + ' m')}
+      ${tog('shadows', 'Shadows')}${tog('bloom', 'Bloom & colour grading')}${tog('msaa', 'Anti-aliasing')}
+      ${rng('fov', 'Field of view', 50, 85, 1, v => v + '°')}
+      <h4>World</h4>
+      ${rng('traffic', 'Traffic density', 0.2, 2, 0.1, v => Math.round(v * 100) + '%')}
+      ${rng('peds', 'Pedestrians', 0, 2, 0.1, v => Math.round(v * 100) + '%')}
+      ${rng('timeSpeed', 'Day speed', 0, 6, 0.5, v => v ? v + '×' : 'paused')}
+    </div><div>
+      <h4>Driving</h4>
+      ${rng('sens', 'Steering sensitivity', 0.4, 1.6, 0.05, v => Math.round(v * 100) + '%')}
+      ${sel('manual', 'Gearbox', [['false', 'Automatic'], ['true', 'Manual (Shift / Ctrl)']])}
+      ${tog('abs', 'ABS')}${tog('tcs', 'Traction control')}${tog('esc', 'Stability control')}${tog('steerAssist', 'Counter-steer assist')}
+      <h4>Interface &amp; sound</h4>
+      ${tog('minimap', 'Minimap')}${tog('shake', 'Camera shake')}
+      ${rng('vol', 'Volume', 0, 1, 0.05, v => Math.round(v * 100) + '%')}
+      <h4>Online</h4>
+      ${tog('mp', 'Multiplayer')}
+      <div class="row"><label>Driver name</label><input type="text" maxlength="18" data-k="name" value="${esc(settings.name || '')}"></div>
+      <div class="row"><label>Progress</label><button class="btn" id="resetProg">Reset progress</button></div>
+    </div></div>`;
+    const box = $('settingsBox');
+    box.querySelectorAll('.tog').forEach(b => b.onclick = () => { const k = b.dataset.k; settings[k] = !settings[k]; b.classList.toggle('on', settings[k]); changed(k); });
+    box.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { const k = r.dataset.k; settings[k] = +r.value; const v = $('v_' + k); if (v) v.textContent = r.parentElement.querySelector('small').textContent = (k === 'view' ? r.value + ' m' : k === 'fov' ? r.value + '°' : k === 'timeSpeed' ? (+r.value ? r.value + '×' : 'paused') : Math.round(r.value * 100) + '%'); changed(k); });
+    box.querySelectorAll('select').forEach(s => s.onchange = () => { const k = s.dataset.k; settings[k] = k === 'manual' ? s.value === 'true' : s.value; changed(k); });
+    box.querySelector('input[type=text]').onchange = (e) => { settings.name = e.target.value.trim().slice(0, 18) || 'Driver'; changed('name'); };
+    $('resetProg').onclick = () => { if (confirm('Reset coins, cars and landmarks?')) { localStorage.removeItem('bishkekDrive'); location.reload(); } };
+  }
+  function changed(k) {
+    if (k === 'preset' && PRESETS[settings.preset]) { Object.assign(settings, PRESETS[settings.preset]); renderSettings(); }
+    else if (['scale', 'view', 'shadows', 'bloom', 'msaa'].includes(k)) settings.preset = 'custom';
+    if (['scale', 'preset'].includes(k)) { applyScale(); renderer.setSize(window.innerWidth, window.innerHeight); }
+    if (['shadows', 'preset'].includes(k)) { renderer.shadowMap.enabled = settings.shadows; scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); }); }
+    if (['bloom', 'msaa', 'preset', 'scale'].includes(k)) buildPost();
+    if (k === 'mp') { if (settings.mp) net.connect(settings.name || 'Driver'); else net.disconnect(); }
+    if (k === 'name' && net.enabled) { net.name = settings.name; }
+    applySettings();
+    camera.updateProjectionMatrix();
+  }
+
+  // ---------------------------------------------------------------- title screen
+  $('nameInput').value = settings.name || '';
+  $('mpToggle').classList.toggle('on', settings.mp);
+  $('mpToggle').onclick = () => { settings.mp = !settings.mp; $('mpToggle').classList.toggle('on', settings.mp); };
   $('startBtn').onclick = () => {
     audio.start();
+    settings.name = ($('nameInput').value.trim() || settings.name || ('Driver' + Math.floor(Math.random() * 900 + 100))).slice(0, 18);
+    saveSettings(settings);
     $('menu').classList.add('hidden');
-    S.mode = 'drive'; S.paused = false;
-    hud.toast('Welcome to <b>Bishkek</b>! Chuy Avenue, in front of Ala-Too Square. Speed limit for this game: <b>150 km/h</b>', 6);
+    S.mode = 'drive'; S.paused = false; rig.snap(car);
+    if (settings.mp) net.connect(settings.name);
+    hud.toast(`Salam, <b>${esc(settings.name)}</b>! Press <b>J</b> to find work · <b>Esc</b> for menu`, 5);
   };
 
-  // ---------------------------------------------------------------- airport interaction
+  // ---------------------------------------------------------------- airport
   function interact() {
     if (S.mode !== 'drive') return;
     const dz = Math.hypot(car.x - airport.dropoff.x, car.z - airport.dropoff.y);
     const ds = Math.hypot(car.x - airport.spotter.x, car.z - airport.spotter.y);
     if (dz < 14) {
-      if (car.speed > 3) { hud.toast('Stop the car first', 1.5); return; }
+      if (car.speed > 3) { hud.toast('Stop the car first', 1.2); return; }
       hud.renderBoard(airport.board, $('fids'));
-      $('airportMenu').classList.remove('hidden');
-      audio.pa();
-    } else if (ds < 14) {
-      startSpot();
-    } else hud.toast('Nothing to interact with here. Airport: drive to the glowing ring in front of the terminal.', 2.5);
+      $('airportMenu').classList.remove('hidden'); audio.pa();
+    } else if (ds < 14) startSpot();
   }
   $('apFlight').onclick = () => {
-    if (game.money < 2500) { hud.toast('Not enough money for a ticket (2 500 сом)', 2); return; }
-    game.money -= 2500; audio.cash();
-    $('airportMenu').classList.add('hidden');
-    startFlight();
+    if (game.money < 500) { hud.toast('Not enough coins for a ticket (500)', 1.6); return; }
+    game.money -= 500; audio.cash();
+    $('airportMenu').classList.add('hidden'); startFlight();
   };
   $('apSpot').onclick = () => { $('airportMenu').classList.add('hidden'); startSpot(); };
   $('apTaxi').onclick = () => {
     $('airportMenu').classList.add('hidden');
-    if (game.mission) game.cancelMission(peds);
-    const M = game.startTaxi(car, peds);
-    if (M) {
-      // passenger right at the terminal going into the city
-      M.x = airport.dropoff.x + airport.n.x * 6; M.z = airport.dropoff.y + airport.n.y * 6;
-      if (M.ped) { M.ped.x = M.ped.tx = M.x; M.ped.z = M.ped.tz = M.z; }
-      M.dest = PLACES.filter(p => !p.airport)[Math.floor(Math.random() * (PLACES.length - 1))];
-      game.setRoute(M.x, M.z, 'Passenger');
-      hud.toast(`🚕 Airport transfer: <b>${M.passenger}</b> just landed and needs a ride to ${M.dest.name}`, 4);
-    }
+    if (!jobs.start('taxi', car, scene, setCar)) return;
+    const J = jobs.active;
+    J.x = airport.dropoff.x + airport.n.x * 6; J.z = airport.dropoff.y + airport.n.y * 6;
+    if (J.ped) { J.ped.x = J.ped.tx = J.x; J.ped.z = J.ped.tz = J.z; }
+    J.dest = PLACES.filter(p => !p.airport)[Math.floor(Math.random() * (PLACES.length - 1))];
+    game.setRoute(J.x, J.z, 'Passenger');
+    hud.toast(`🚕 <b>${J.passenger}</b> just landed and needs a ride to ${J.dest.name}`, 3.5);
   };
   $('apClose').onclick = () => $('airportMenu').classList.add('hidden');
-
-  function fade(on) { $('fade').classList.toggle('on', on); }
-
+  const fade = (on) => $('fade').classList.toggle('on', on);
   async function startFlight() {
     fade(true); await sleep(700);
     S.flight = airport.createScenicFlight();
     S.mode = 'flight'; S.flightCam = 0;
     airport.scenicCamera(S.flight, 0, camTarget, camLook); camera.position.copy(camTarget); lookSm.copy(camLook);
-    world.radius = 2600;
-    scene.fog.far = 9000; camera.far = 12000; camera.updateProjectionMatrix();
-    car.group.visible = true;
-    $('boarding').classList.add('show'); setTimeout(() => $('boarding').classList.remove('show'), 4500);
-    audio.pa();
-    fade(false);
+    world.radius = Math.max(settings.view, 2400);
+    camera.far = 12000; camera.updateProjectionMatrix();
+    $('boarding').classList.add('show'); setTimeout(() => $('boarding').classList.remove('show'), 4000);
+    audio.pa(); fade(false);
   }
   async function endFlight(skipped) {
     if (!S.flight || S.ending) return;
-    S.ending = true;
-    const F = S.flight;
+    S.ending = true; const F = S.flight;
     fade(true); await sleep(700);
     airport.endScenic(F); S.flight = null; S.ending = false;
-    S.mode = 'drive'; world.radius = baseRadius; camera.far = 4200; camera.updateProjectionMatrix();
-    hud.setFlightInfo(null);
-    rig.pos.set(car.x - Math.sin(car.h) * 8, 3, car.z - Math.cos(car.h) * 8);
-    fade(false);
-    hud.toast(skipped ? 'Flight skipped – back at Manas airport' : 'Welcome back to Bishkek! Thank you for flying Ala-Too Air.', 3);
+    S.mode = 'drive'; world.radius = settings.view; camera.far = 4200; camera.updateProjectionMatrix();
+    hud.setFlightInfo(null); rig.snap(car); fade(false);
+    hud.toast(skipped ? 'Back at Manas airport' : 'Welcome back to Bishkek!', 2.5);
   }
   function startSpot() {
     S.mode = 'spot';
@@ -293,11 +431,11 @@ async function boot() {
     if (!pl) { pl = airport._newPlane(); airport._startApproach(pl, 0.45); }
     S.spot = { pl, cam: new THREE.Vector3(airport.spotter.x, 2.2, airport.spotter.y) };
     lookSm.set(pl.x, pl.y, pl.z);
-    hud.toast('Plane spotting – watch the landing. [Esc] to exit', 3);
+    hud.toast('Plane spotting · Esc to exit', 2.5);
   }
   function endSpot() { S.mode = 'drive'; S.spot = null; }
 
-  // ---------------------------------------------------------------- touch controls
+  // ---------------------------------------------------------------- touch
   if ('ontouchstart' in window) {
     $('touch').classList.remove('hidden');
     const bind = (id, on, off) => { const el = $(id); el.addEventListener('touchstart', (e) => { e.preventDefault(); audio.start(); on(); }); el.addEventListener('touchend', (e) => { e.preventDefault(); off(); }); };
@@ -307,13 +445,13 @@ async function boot() {
     bind('tBrake', () => touch.brake = 1, () => touch.brake = 0);
     bind('tHand', () => touch.hand = true, () => touch.hand = false);
     bind('tCam', () => onKey('KeyC'), () => { });
-    bind('tMap', () => onKey('KeyM'), () => { });
     bind('tAct', () => onKey('KeyE'), () => { });
+    bind('tMenu', () => onKey('Escape'), () => { });
   }
-
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (post) post.setSize(window.innerWidth, window.innerHeight);
   });
 
   // ---------------------------------------------------------------- loop
@@ -321,85 +459,89 @@ async function boot() {
   const focusObj = { x: 0, z: 0, h: 0, speed: 0, spec: car.spec, vx: 0, vz: 0, radius: 1 };
   const info = {};
   const camTarget = new THREE.Vector3(), camLook = new THREE.Vector3(), lookSm = new THREE.Vector3();
-  let fpsT = 0, frames = 0;
-
-  function requestPhoto(cb) { S.photoCbs.push(cb); }
   const photoCanvas = document.createElement('canvas'); photoCanvas.width = 320; photoCanvas.height = 180;
-
+  const requestPhoto = (cb) => S.photoCbs.push(cb);
   $('loading').classList.add('hidden');
   $('menu').classList.remove('hidden');
+  if (!localStorage.getItem('bd_seen')) { try { localStorage.setItem('bd_seen', '1'); } catch (e) { /* ignore */ } }
 
   function districtOf(x, z) {
     if (airport.rel(new THREE.Vector2(x, z)).x > -2500 && z < -15500) return 'Manas International Airport';
-    if (z < -3600) return 'Bishkek – Manas airport road';
+    if (z < -3600) return 'Bishkek – Manas road';
     if (z < 300) return x < 500 ? 'Pervomaisky district' : 'Sverdlovsky district';
     return x < 0 ? 'Leninsky district' : 'Oktyabrsky district';
   }
 
+  let frames = 0;
   function loop() {
     requestAnimationFrame(loop);
     let dt = Math.min(0.05, clock.getDelta());
     const running = !S.paused && S.mode !== 'menu';
-    if (!running) dt = 0;
-    S.time += dt;
+    const simDt = running ? dt : 0;
+    S.time += simDt;
     U.uTime.value += dt;
-    S.hour = (S.hour + dt / 60 * settings.timeSpeed) % 24;
+    S.hour = (S.hour + simDt / 60 * settings.timeSpeed) % 24;
     env.setHour(S.hour);
-    // rush hours -> traffic jams on the main avenues
     const h = S.hour;
     traffic.rush = (h > 7.5 && h < 10) || (h > 17 && h < 20) ? 1.65 : (h > 23 || h < 6) ? 0.45 : 1;
 
-    // ---- input
+    // ---- input (keyboard ramps so steering & throttle feel analogue)
     const k = S.keys;
     let steerIn = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + touch.steer;
-    let thr = (k.KeyW || k.ArrowUp ? 1 : 0) + touch.gas, brk = (k.KeyS || k.ArrowDown ? 1 : 0) + touch.brake;
+    let thrIn = (k.KeyW || k.ArrowUp ? 1 : 0) + touch.gas, brk = (k.KeyS || k.ArrowDown ? 1 : 0) + touch.brake;
+    let analog = false;
     const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g) : null;
     if (gp) {
-      if (Math.abs(gp.axes[0]) > 0.12) steerIn = gp.axes[0];
-      if (gp.buttons[7]) thr = Math.max(thr, gp.buttons[7].value);
-      if (gp.buttons[6]) brk = Math.max(brk, gp.buttons[6].value);
+      if (Math.abs(gp.axes[0]) > 0.08) { steerIn = Math.sign(gp.axes[0]) * Math.pow(Math.abs(gp.axes[0]), 1.5); analog = true; }
+      if (gp.buttons[7]?.value > 0.02) thrIn = gp.buttons[7].value;
+      if (gp.buttons[6]?.value > 0.02) brk = gp.buttons[6].value;
     }
-    S.steer += (THREE.MathUtils.clamp(steerIn, -1, 1) - S.steer) * Math.min(1, dt * (steerIn === 0 ? 7 : 4.5));
-    const input = { steer: S.steer, throttle: Math.min(1, thr), brake: Math.min(1, brk), hand: !!(k.Space || touch.hand || (gp && gp.buttons[0]?.pressed)) };
+    S.steer = analog ? steerIn : S.steer + (THREE.MathUtils.clamp(steerIn, -1, 1) - S.steer) * Math.min(1, dt * (steerIn === 0 ? 12 : 8));
+    S.thr += (Math.min(1, thrIn) - S.thr) * Math.min(1, dt * (thrIn ? 5 : 12));
+    const input = { steer: S.steer, throttle: S.thr < 0.02 ? 0 : S.thr, brake: Math.min(1, brk), hand: !!(k.Space || touch.hand || gp?.buttons[0]?.pressed) };
     car.throttleOn = input.throttle > 0;
     const night = env.night;
     car.night = night > 0.45;
 
     if (running) {
       if (S.mode === 'drive' || S.mode === 'spot') {
+        // surface: off-road is slippery and slow
+        const road = map.nearestRoad(car.x, car.z, 25);
+        const onRoad = road && road.dist < road.e.w / 2 + 3.5;
+        car.surface = onRoad || airport.runwayIncursion(car.x, car.z) ? 1 : 0.72;
+        info.road = road && road.dist < road.e.w / 2 + 4 ? road : null;
         const inp = S.mode === 'spot' ? { steer: 0, throttle: 0, brake: 1, hand: true } : input;
         car.update(dt, inp, world, traffic, (v, what) => {
-          rig.shake = Math.min(0.6, v * 0.04);
+          if (settings.shake) rig.shake = Math.min(0.6, v * 0.04);
           audio.crash(v);
-          if (v > 6) hud.toast(what === 'car' ? '💥 Collision! Careful – Bishkek drivers will honk at you.' : '💥 Crash!', 1.5);
         });
       }
       const focus = S.mode === 'flight' ? Object.assign(focusObj, { x: S.flight.plane.x, z: S.flight.plane.z, h: S.flight.plane.h, speed: 0 }) : car;
       traffic.night = night;
-      traffic.update(dt, focus.x !== undefined ? (S.mode === 'flight' ? focusObj : car) : car, settings.peds > 0 ? peds : null);
-      peds.update(dt, S.mode === 'flight' ? focusObj : car, settings.peds > 0);
-      // AI honks when stuck behind the player
+      traffic.update(dt, focus, settings.peds > 0 ? peds : null);
+      peds.update(dt, focus, settings.peds > 0);
       for (const c of traffic.honks) { const d = Math.hypot(c.x - car.x, c.z - car.z); audio.horn(Math.min(0.3, 6 / (d + 8)), 0.35 + Math.random() * 0.4, 0.8 + Math.random() * 0.5); }
       airport.update(dt, night, car, S.flight ? S.flight.plane : null);
       landmarks.update(dt, S.time, night);
       if (S.mode === 'drive') {
-        // road info, rules, missions
-        const road = map.nearestRoad(car.x, car.z, 25);
-        info.road = road && road.dist < road.e.w / 2 + 4 ? road : null;
         const nm = info.road ? map.roadName(info.road.e.name) : null;
         info.street = nm ? nm.en : null;
         game.trafficTime = traffic.time;
         game.checkRules(dt, car, info, null, airport, requestPhoto);
         game.checkLandmarks(car);
-        game.updateMission(dt, car, peds);
-        hud.setStreet(nm ? (nm.en !== nm.local ? `${nm.en} · ${nm.local}` : nm.local) : (info.runway ? 'Runway 07/25' : ''), districtOf(car.x, car.z));
+        const res = jobs.update(dt, car, scene, setCar);
+        if (res && res.done) { game.jobsDone = jobs.completed; game.save(car); }
+        if (!jobs.active && jobs.nextIn !== undefined) {
+          jobs.nextIn -= dt;
+          if (jobs.nextIn <= 0) { const t = jobs.nextType; jobs.nextIn = undefined; jobs.start(t, car, scene, setCar); }
+        }
+        hud.setStreet(nm ? (nm.en !== nm.local ? `${nm.en}` : nm.local) : (info.runway ? 'Runway 07/25' : ''), nm && nm.en !== nm.local ? nm.local : districtOf(car.x, car.z));
         hud.setLimit(car.speed * 3.6, info.wrongWay, info.runway);
-        // context hints
         const dzn = Math.hypot(car.x - airport.dropoff.x, car.z - airport.dropoff.y);
         const dsp = Math.hypot(car.x - airport.spotter.x, car.z - airport.spotter.y);
-        $('hint').textContent = dzn < 14 ? 'Press E – Manas Airport: flights, plane spotting, airport taxi' : dsp < 14 ? 'Press E – watch planes land' : '';
-        $('hint').classList.toggle('show', dzn < 14 || dsp < 14);
-      } else $('hint').classList.remove('show');
+        const hintTxt = dzn < 14 ? '<b>E</b> · Manas Airport' : dsp < 14 ? '<b>E</b> · watch planes land' : '';
+        if (hintTxt !== S.hintTxt) { S.hintTxt = hintTxt; $('hint').innerHTML = hintTxt; $('hint').classList.toggle('show', !!hintTxt); }
+      } else if (S.hintTxt) { S.hintTxt = ''; $('hint').classList.remove('show'); }
       if (S.mode === 'flight') {
         const fdt = ['pushback', 'taxi', 'taxiIn'].includes(S.flight.stage) ? dt * 3 : dt;
         const done = !S.ending && airport.updateScenic(S.flight, fdt);
@@ -407,66 +549,57 @@ async function boot() {
       }
       game.updateRoute(S.mode === 'flight' ? focusObj : car, scene);
       if (game.routeMat) game.routeMat.uniforms.uTime.value = S.time;
-      // mission HUD
-      const M = game.mission;
-      if (M) {
-        const d = Math.hypot(car.x - M.x, car.z - M.z);
-        hud.setMission(M.stage === 'pickup' ? `🚕 <b>Taxi</b>: pick up ${M.passenger} · ${fmtDist(d)}<small>J – cancel job</small>` : `🚕 <b>${M.passenger}</b> → ${M.dest.name} · ${fmtDist(d)}<small>Fare ${fmt(M.fare)} сом · stop at the destination</small>`);
-      } else if (game.routeTarget) hud.setMission(`📍 GPS: ${game.routeTarget.label} · ${fmtDist(Math.hypot(car.x - game.routeTarget.x, car.z - game.routeTarget.z))}<small>G – clear route</small>`);
-      else hud.setMission(`<b>J</b> – start a taxi job · <b>M</b> – city map`);
+      const js = jobs.status(car);
+      const dist = game.routeTarget ? Math.hypot(car.x - game.routeTarget.x, car.z - game.routeTarget.z) : 0;
+      hud.setMission(js ? `${js} · ${fmtDist(dist)}` : game.routeTarget ? `📍 ${game.routeTarget.label} · ${fmtDist(dist)}` : '');
       S.lastSave += dt;
       if (S.lastSave > 10) { S.lastSave = 0; game.save(car); }
     }
+    net.update(dt, car, { money: game.money, job: jobs.active ? JOBS[jobs.active.type].icon : '', jobs: jobs.completed }, night);
 
     // ---- camera
     if (S.mode === 'flight' && S.flight) {
       airport.scenicCamera(S.flight, S.flightCam, camTarget, camLook);
-      const k2 = S.flightCam === 0 ? 1 - Math.exp(-dt * 4) : 1;
-      camera.position.lerp(camTarget, k2 || 1);
+      camera.position.lerp(camTarget, S.flightCam === 0 ? 1 - Math.exp(-dt * 4) : 1);
       lookSm.lerp(camLook, S.flightCam === 0 ? 1 - Math.exp(-dt * 6) : 1);
       camera.lookAt(lookSm);
       camera.fov = S.flightCam === 2 ? 70 : 55; camera.updateProjectionMatrix();
       const pl = S.flight.plane;
       const hdg = (Math.atan2(Math.sin(pl.h), -Math.cos(pl.h)) * 180 / Math.PI + 360) % 360;
-      hud.setFlightInfo({ alt: (pl.y - pl.a.groundY) + 627, spd: pl.v, hdg, stage: { pushback: 'Pushback', taxi: 'Taxiing to runway 07', roll: 'Take-off roll', air: 'Scenic flight over Bishkek', final: 'Final approach – runway 07', taxiIn: 'Taxi to gate', done: 'Arrived' }[S.flight.stage], cam: ['Chase', 'Window seat', 'Cockpit', 'Spotter'][S.flightCam] });
-    } else if (S.mode === 'free') {
-      // debug / photo camera (set from the console)
+      hud.setFlightInfo({ alt: (pl.y - pl.a.groundY) + 627, spd: pl.v, hdg, stage: { pushback: 'Pushback', taxi: 'Taxi to runway 07', roll: 'Take-off', air: 'Over Bishkek', final: 'Final approach', taxiIn: 'Taxi to gate', done: 'Arrived' }[S.flight.stage], cam: ['Chase', 'Window', 'Cockpit', 'Spotter'][S.flightCam] });
     } else if (S.mode === 'spot' && S.spot) {
       const pl = S.spot.pl;
       camera.position.copy(S.spot.cam);
       lookSm.lerp(new THREE.Vector3(pl.x, pl.y, pl.z), 1 - Math.exp(-dt * 5));
       camera.lookAt(lookSm);
-      const dist = Math.hypot(pl.x - S.spot.cam.x, pl.z - S.spot.cam.z);
-      camera.fov = THREE.MathUtils.clamp(dist / 40, 12, 60); camera.updateProjectionMatrix();
-      if (!airport.planes.includes(pl) || pl.state === 'taxiIn' || pl.state === 'climb' || pl.state === 'goaround' && pl.y > 300) { if (S.time > 0) { endSpot(); hud.toast('Landing complete', 1.5); } }
-    } else {
+      camera.fov = THREE.MathUtils.clamp(Math.hypot(pl.x - S.spot.cam.x, pl.z - S.spot.cam.z) / 40, 12, 60); camera.updateProjectionMatrix();
+      if (!airport.planes.includes(pl) || pl.state === 'taxiIn' || pl.state === 'climb' || (pl.state === 'goaround' && pl.y > 300)) endSpot();
+    } else if (S.mode !== 'free') {
       if (!rmb) S.mouseYaw *= Math.exp(-dt * 2);
+      rig.baseFov = settings.fov;
       rig.update(Math.max(dt, 0.001), car, S.mouseYaw);
       if (S.mode === 'menu') {
-        // slow orbit on the title screen
-        const a = performance.now() * 0.00005;
-        camera.position.set(car.x + Math.sin(a) * 60, 28, car.z + Math.cos(a) * 60);
-        camera.lookAt(car.x, 4, car.z);
+        const a = performance.now() * 0.00004;
+        camera.position.set(car.x + Math.sin(a) * 26, 6 + Math.sin(a * 3) * 2, car.z + Math.cos(a) * 26);
+        camera.lookAt(car.x, 2, car.z);
       }
     }
 
     // ---- world & environment
-    const focusPos = S.mode === 'flight' && S.flight ? { x: S.flight.plane.x, z: S.flight.plane.z } : { x: car.x, z: car.z };
-    world.update(S.mode === 'flight' || S.mode === 'free' ? { x: camera.position.x, z: camera.position.z } : focusPos, dt);
-    const lit = env.update(camera, S.mode === 'flight' ? focusPos : car);
-    if (S.mode === 'flight') { env.sun.shadow.camera.left = env.sun.shadow.camera.bottom = -160; env.sun.shadow.camera.right = env.sun.shadow.camera.top = 160; env.sun.shadow.camera.updateProjectionMatrix(); }
-    else if (env.sun.shadow.camera.right !== 110) { env.sun.shadow.camera.left = env.sun.shadow.camera.bottom = -110; env.sun.shadow.camera.right = env.sun.shadow.camera.top = 110; env.sun.shadow.camera.updateProjectionMatrix(); }
+    const fp = S.mode === 'flight' || S.mode === 'free' ? { x: camera.position.x, z: camera.position.z } : { x: car.x, z: car.z };
+    world.update(fp, dt);
+    const lit = env.update(camera, S.mode === 'flight' && S.flight ? { x: S.flight.plane.x, z: S.flight.plane.z } : car);
+    const sc = env.sun.shadow.camera, want = S.mode === 'flight' ? 160 : 110;
+    if (sc.right !== want) { sc.left = sc.bottom = -want; sc.right = sc.top = want; sc.updateProjectionMatrix(); }
     world.setNight(lit.night);
-    if (S.mode !== 'flight') { scene.fog.near = 250; scene.fog.far = world.radius + 300; }
-    // ambience / jets
+    if (post) post.setNight(lit.night);
+    if (S.mode !== 'flight') { scene.fog.near = 350; scene.fog.far = world.radius + 700; }
     const jet = airport.noiseAt(camera.position.x, camera.position.z, camera.position.y);
-    audio.update(dt, car, { throttle: input.throttle, inFlight: S.mode === 'flight', cityLevel: Math.min(1, traffic.cars.length / 200) * (Math.abs(car.z) < 4000 ? 1 : 0.2), jet: S.mode === 'flight' ? 0.35 : jet });
+    audio.update(dt, car, { throttle: input.throttle, inFlight: S.mode === 'flight', cityLevel: Math.min(1, traffic.cars.length / 200) * (Math.abs(car.z) < 6000 ? 1 : 0.2), jet: S.mode === 'flight' ? 0.35 : jet });
 
     // ---- render
-    renderer.clear();
-    env.render(renderer);
-    renderer.clearDepth();
-    renderer.render(scene, camera);
+    if (post) post.render(dt);
+    else { renderer.setRenderTarget(null); renderer.clear(); env.render(renderer); renderer.clearDepth(); renderer.render(scene, camera); }
     if (S.photoCbs.length) {
       const pc = photoCanvas.getContext('2d');
       pc.drawImage(renderer.domElement, 0, 0, 320, 180);
@@ -480,18 +613,21 @@ async function boot() {
 
     // ---- HUD
     if (S.mode !== 'menu') {
-      hud.drawSpeedo(car);
-      frames++; fpsT += dt;
-      if (frames % 3 === 0) hud.drawMini(car, traffic, game, airport);
-      hud.setMoney(game.money, game.fines.length);
-      hud.setClock(S.hour, traffic.jamLevel(car.x, car.z));
-      if (S.mapOpen) hud.drawBigMap(car, game, airport);
+      frames++;
+      if (frames % 2 === 0) hud.drawSpeedo(car);
+      if (settings.minimap && frames % 3 === 0) hud.drawMini(car, traffic, game, airport, net);
+      hud.setMoney(game.money);
+      hud.setClock(S.hour, settings.mp ? (net.status === 'online' ? net.players.size : null) : null);
+      if (S.mapOpen) hud.drawBigMap(car, game, airport, net);
+      if (S.tabOnline && frames % 20 === 0) renderOnline();
       $('hudRoot').classList.toggle('flightmode', S.mode === 'flight' || S.mode === 'spot');
     }
   }
   loop();
+  window.addEventListener('beforeunload', () => { game.save(car); net.disconnect(); });
 }
 
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmtDist(d) { return d > 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d / 10) * 10 + ' m'; }
 
 boot().catch(e => { console.error(e); const el = document.getElementById('loadText'); if (el) el.textContent = 'Error: ' + e.message; });

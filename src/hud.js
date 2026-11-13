@@ -75,11 +75,11 @@ export class HUD {
     c.strokeStyle = rpm > 0.88 ? '#ff4040' : '#f2c200';
     c.beginPath(); c.arc(cx, cy, R * 0.42, Math.PI * 0.8, Math.PI * 0.8 + Math.PI * 1.4 * Math.min(1, rpm)); c.stroke();
     c.fillStyle = '#f2c200'; c.font = `700 ${14 * d}px Inter, Arial`;
-    c.fillText(car.gear < 0 ? 'R' : car.speed < 0.3 && !car.throttleOn ? 'N' : car.gear, cx, cy - R * 0.12);
+    c.fillText(car.gearLabel || '1', cx, cy - R * 0.12);
   }
 
   // ------------------------------------------------------------ minimap
-  drawMini(car, traffic, game, airport) {
+  drawMini(car, traffic, game, airport, net) {
     const c = this.mctx, W = this.mini.width, H = this.mini.height, d = this.dpr;
     const s = 0.55 * d * (car.speed > 25 ? 0.75 : 1); // px per metre
     c.save();
@@ -140,6 +140,7 @@ export class HUD {
       c.beginPath(); c.arc(p.x, p.z, 6 / s * d, 0, 7); c.fill();
     }
     if (game.routeTarget) { c.fillStyle = '#ff3a6a'; c.beginPath(); c.arc(game.routeTarget.x, game.routeTarget.z, 8 / s * d, 0, 7); c.fill(); }
+    if (net) for (const r of net.players.values()) { c.fillStyle = '#3ddc84'; c.beginPath(); c.arc(r.x, r.z, 6 / s * d, 0, 7); c.fill(); }
     c.restore();
     // player arrow
     c.save(); c.translate(W / 2, H / 2 + H * 0.12);
@@ -183,7 +184,7 @@ export class HUD {
     }, { passive: false });
   }
 
-  drawBigMap(car, game, airport) {
+  drawBigMap(car, game, airport, net) {
     const c = this.bctx, W = this.big.width, H = this.big.height, v = this.mapView, s = v.s;
     c.fillStyle = '#161b20'; c.fillRect(0, 0, W, H);
     c.save();
@@ -258,6 +259,7 @@ export class HUD {
         c.fillText(label, sx, sy);
       }
     }
+    if (net) for (const r of net.players.values()) { const [sx, sy] = toS(r.x, r.z); c.fillStyle = '#3ddc84'; c.beginPath(); c.arc(sx, sy, 6 * this.dpr, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillText(r.name, sx, sy - 10 * this.dpr); }
     if (game.routeTarget) { const [sx, sy] = toS(game.routeTarget.x, game.routeTarget.z); c.fillStyle = '#ff3a6a'; c.beginPath(); c.arc(sx, sy, 7 * this.dpr, 0, 7); c.fill(); }
     const [px, py] = toS(car.x, car.z);
     c.save(); c.translate(px, py); c.rotate(Math.PI - car.h);
@@ -273,28 +275,34 @@ export class HUD {
 
   // ------------------------------------------------------------ text widgets
   setStreet(name, district) {
-    if (name !== this._street) { this._street = name; $('street').textContent = name || ''; $('street').classList.toggle('hidden', !name); }
-    if (district !== this._district) { this._district = district; $('district').textContent = district || ''; }
+    // shows briefly when the street changes, then fades (clean screen)
+    if (name && name !== this._street) {
+      this._street = name; $('street').innerHTML = `${name}<small>${district || ''}</small>`;
+      $('street').classList.add('show'); clearTimeout(this._stTo); this._stTo = setTimeout(() => $('street').classList.remove('show'), 4000);
+    }
   }
-  setMoney(m, fines) {
-    const t = fmt(m) + ' сом';
-    if (t !== this._money) { this._money = t; $('money').textContent = t; $('money').classList.toggle('neg', m < 0); }
-    if (fines !== this._finesN) { this._finesN = fines; $('finecount').textContent = fines ? `${fines} fine${fines > 1 ? 's' : ''}` : 'No fines'; }
+  setMoney(m) {
+    const t = fmt(m);
+    if (t !== this._money) {
+      const up = this._mv !== undefined && m > this._mv;
+      this._money = t; this._mv = m; $('money').textContent = t; $('coins').classList.toggle('neg', m < 0);
+      if (up) { const el = $('coins'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+    }
   }
-  setClock(h, jam) {
+  setClock(h, online) {
     this.hour = h;
-    $('clock').textContent = this.clockText();
-    const jl = jam > 0.55 ? ['Heavy traffic jam', 'jam3'] : jam > 0.32 ? ['Slow traffic', 'jam2'] : ['Traffic flowing', 'jam1'];
-    if (jl[0] !== this._jam) { this._jam = jl[0]; const el = $('jam'); el.textContent = jl[0]; el.className = jl[1]; }
+    const t = this.clockText() + (online !== null && online !== undefined ? ` · <span class="dot ${online > 0 ? 'on' : ''}"></span>${online + 1}` : '');
+    if (t !== this._clk) { this._clk = t; $('clock').innerHTML = t; }
   }
   setLimit(kmh, wrongWay, runway) {
     const over = kmh > SPEED_LIMIT;
+    $('limit').classList.toggle('show', kmh > SPEED_LIMIT - 12);
     $('limit').classList.toggle('over', over);
-    $('warn').textContent = runway ? '⚠ ACTIVE RUNWAY – LEAVE IMMEDIATELY' : wrongWay ? '⚠ WRONG WAY – ONE-WAY STREET' : over ? '⚠ SPEED CAMERA ZONE – LIMIT 150' : '';
-    $('warn').classList.toggle('show', !!(runway || wrongWay || over));
+    const w = runway ? 'ACTIVE RUNWAY – LEAVE NOW' : wrongWay ? 'WRONG WAY' : '';
+    if (w !== this._w) { this._w = w; $('warn').textContent = w; $('warn').classList.toggle('show', !!w); }
   }
   setMission(text) {
-    if (text !== this._mission) { this._mission = text; $('mission').innerHTML = text || ''; $('mission').classList.toggle('hidden', !text); }
+    if (text !== this._mission) { this._mission = text; $('mission').innerHTML = text || ''; $('mission').classList.toggle('show', !!text); }
   }
   toast(text, sec = 3) {
     const el = $('toast'); el.innerHTML = text; el.classList.add('show');
@@ -303,7 +311,7 @@ export class HUD {
   showFine(f) {
     const el = $('fine');
     $('fineKind').textContent = f.kind.toUpperCase();
-    $('fineAmt').textContent = '−' + fmt(f.amount) + ' сом';
+    $('fineAmt').textContent = '−' + fmt(f.amount) + ' coins';
     $('fineDetail').textContent = f.detail;
     $('fineTime').textContent = f.time + ' · Bishkek "Safe City" camera';
     const img = $('finePhoto');
@@ -317,7 +325,7 @@ export class HUD {
     $('discName').textContent = p.name;
     $('discLocal').textContent = p.local || '';
     $('discFact').textContent = p.fact;
-    $('discCount').textContent = `Landmark ${n}/${total} discovered · +500 сом`;
+    $('discCount').textContent = `Landmark ${n}/${total} · +500 coins`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(this._discTo); this._discTo = setTimeout(() => el.classList.remove('show'), 7000);
   }

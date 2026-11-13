@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { CHUNK, LANE_W, mulberry, pointInPoly, ck } from './data.js';
 import { GB, ribbon, disc, hexColor, polyNormals, subPolyline, cumLen } from './geo.js';
 import { buildingMaterial, groundMaterial, markingMaterial, U } from './materials.js';
-import { treeGeometries, treeGeometriesLow, lampGeometry, lampGlowGeometry, busStopGeometry, benchGeometry } from './props.js';
+import { treeAtlas, treeGeometries, treeGeometriesLow, lampGeometry, lampGlowGeometry, busStopGeometry, benchGeometry } from './props.js';
 
 const PAL = {
   house: [0xe8e2d4, 0xf0ead8, 0xd9c9a8, 0xb5654a, 0xc9bfae, 0xe6dcc0, 0xa8553e, 0xd8d0c8],
@@ -37,7 +37,7 @@ export class World {
       asphalt: groundMaterial(T, T.asphalt, 7, 0xffffff, 0.92),
       concrete: groundMaterial(T, T.concrete, 20, 0xc8c8c4, 0.85),
       water: new THREE.MeshStandardMaterial({ color: 0x5a8090, roughness: 0.06, metalness: 0.4, vertexColors: true }),
-      tree: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
+      tree: (() => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, map: treeAtlas(), alphaTest: 0.42, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;'); }; return m; })(),
       lamp: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.5 }),
       lampGlow: new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffc070, emissiveIntensity: 0 }),
       prop: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
@@ -112,6 +112,7 @@ export class World {
   _dispose(k, L) {
     this.root.remove(L.group);
     L.group.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+    if (L.signTex) { L.signTex.dispose(); L.signMat.dispose(); }
     this.live.delete(k);
   }
 
@@ -140,6 +141,9 @@ export class World {
       const m = new THREE.Mesh(bg.build(), this.mat.building);
       m.castShadow = true; m.receiveShadow = true; group.add(m);
     }
+
+    // ---------------- real shop / cafe / pharmacy signboards from OSM
+    if (c.signs.length) this._signs(c, group, L);
 
     // ---------------- roads, sidewalks, markings
     const rg = new GB(), sg = new GB(), mg = new GB({ aDash: 2 });
@@ -306,6 +310,75 @@ export class World {
     if (this.onChunk) this.onChunk(c, L);
   }
 
+  _signs(c, group, L) {
+    const SIGN_COL = { pharmacy: ['#1d8a4a', '#fff'], bank: ['#163c7a', '#fff'], cafe: ['#5a3a22', '#ffe9c8'], restaurant: ['#7a1e1e', '#fff3d0'], fast_food: ['#d8261c', '#fff'],
+      supermarket: ['#f2c200', '#1a1a1a'], convenience: ['#1f5fa8', '#fff'], fuel: ['#0a6a3a', '#fff'], hotel: ['#2a2a40', '#f0d080'], clothes: ['#222', '#fff'], bar: ['#3a1a40', '#ffd0f0'], mobile_phone: ['#e05a10', '#fff'] };
+    const list = [];
+    for (const s of c.signs) {
+      const gx = Math.floor(s.x / this.map.BGRID), gz = Math.floor(s.z / this.map.BGRID);
+      let best = null, bd = 18;
+      for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) {
+        const a = this.map.bgrid.get(ck(gx + ox, gz + oz)); if (!a) continue;
+        for (const B of a) {
+          if (B.h < 3 || B.h > 80) continue;
+          const p = B.pts, n = p.length / 2;
+          let A = 0; for (let i = 0; i < n; i++) { const j = (i + 1) % n; A += p[i * 2] * p[j * 2 + 1] - p[j * 2] * p[i * 2 + 1]; }
+          const out = A > 0 ? 1 : -1;
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            const ax = p[i * 2], az = p[i * 2 + 1], bx = p[j * 2], bz = p[j * 2 + 1];
+            const vx = bx - ax, vz = bz - az, l = Math.hypot(vx, vz); if (l < 3) continue;
+            let t = ((s.x - ax) * vx + (s.z - az) * vz) / (l * l); t = Math.max(0.15, Math.min(0.85, t));
+            const px = ax + vx * t, pz = az + vz * t, d = Math.hypot(s.x - px, s.z - pz);
+            const nx = vz / l * out, nz = -vx / l * out;
+            // prefer walls facing a street
+            const r = this.map.nearestRoad(px + nx * 6, pz + nz * 6, 30);
+            const score = d + (r ? r.dist * 0.15 : 6);
+            if (score < bd) { bd = score; best = { x: px + nx * 0.06, z: pz + nz * 0.06, nx, nz, l, h: Math.min(B.h, 4.2) }; }
+          }
+        }
+      }
+      if (best && !list.some(o => Math.hypot(o.x - best.x, o.z - best.z) < 2.5)) list.push(Object.assign(best, { name: s.name, kind: s.kind }));
+      if (list.length >= 48) break;
+    }
+    if (!list.length) return;
+    const CW = 256, CH = 48, cols = 4;
+    const rows = Math.ceil(list.length / cols);
+    const cv = document.createElement('canvas'); cv.width = CW * cols; cv.height = CH * rows;
+    const x = cv.getContext('2d');
+    const pos = [], uv = [], nor = [], idx = [];
+    list.forEach((s, i) => {
+      const cx = (i % cols) * CW, cy = Math.floor(i / cols) * CH;
+      const [bg, fg] = SIGN_COL[s.kind] || ['#8a1a1a', '#fff'];
+      x.fillStyle = bg; x.fillRect(cx, cy, CW, CH);
+      x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(cx, cy, CW, 4);
+      x.fillStyle = fg; x.textAlign = 'center'; x.textBaseline = 'middle';
+      let fs = 30; x.font = `700 ${fs}px Arial`;
+      while (x.measureText(s.name).width > CW - 16 && fs > 12) { fs -= 2; x.font = `700 ${fs}px Arial`; }
+      x.fillText(s.name.toUpperCase ? s.name : s.name, cx + CW / 2, cy + CH / 2 + 1);
+      if (s.kind === 'pharmacy') { x.fillStyle = '#fff'; x.fillRect(cx + 8, cy + 18, 18, 6); x.fillRect(cx + 14, cy + 12, 6, 18); }
+      const w = Math.min(s.l * 0.8, 1.6 + s.name.length * 0.28), hgt = w * CH / CW * 1.15;
+      const ux = -s.nz, uz = s.nx; // along the wall
+      const y0 = s.h - 0.6 - hgt, y1 = s.h - 0.6;
+      const yy0 = Math.max(2.6, Math.min(y0, 3.0)), yy1 = yy0 + hgt;
+      const b = pos.length / 3;
+      for (const [k, yy] of [[-1, yy0], [1, yy0], [1, yy1], [-1, yy1]]) { pos.push(s.x + ux * k * w / 2, yy, s.z + uz * k * w / 2); nor.push(s.nx, 0, s.nz); }
+      const u0 = (cx) / cv.width, u1 = (cx + CW) / cv.width, v0 = 1 - (cy + CH) / cv.height, v1 = 1 - cy / cv.height;
+      uv.push(u1, v0, u0, v0, u0, v1, u1, v1);
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      void y1;
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    const mat = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.05 + this.night * 0.9, roughness: 0.5, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(g, mat);
+    group.add(m); L.signMat = mat; L.signTex = t;
+  }
+
   _blocked(x, z, own, margin) {
     if (this.map.insideBuilding(x, z, margin)) return true;
     const r = this.map.nearestRoad(x, z, 14);
@@ -420,7 +493,8 @@ export class World {
       default: style = 2; color = pick(PAL.panel);
     }
     if (B.name && /Historical|Музей|museum|Филармон|Philharmonic|Opera|Театр|Theat/i.test(B.name)) { style = 5; color = 0xe8e4dc; }
-    const c = hexColor(color);
+    let c = hexColor(color);
+    if (B.colour) { try { const oc = new THREE.Color(B.colour); if (B.colour !== 'white' || kind !== 3) c = [oc.r, oc.g, oc.b]; } catch (e) { /* bad tag */ } }
     const jit = 0.92 + rnd() * 0.12;
     const cr = c[0] * jit, cg = c[1] * jit, cb = c[2] * jit;
     const seed = rnd() * 100;
@@ -444,8 +518,23 @@ export class World {
       if (addCol && h > 1.5) this.addWall(x0, z0, x1, z1);
       u += l;
     }
+    // parapet around flat roofs (gives buildings a proper silhouette)
+    const pitched = (kind === 1 && area < 260 && n <= 8) || /gabled|hipped|pitched/.test(B.roofShape || '');
+    if (!pitched && h > 5 && kind !== 5 && kind !== 6) {
+      const ph = kind === 3 || kind === 10 ? 1.1 : 0.7;
+      const pc = [cr * 0.92, cg * 0.92, cb * 0.92];
+      const exP = { aInfo: [0, seed], aWin: [0, 0] };
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const x0 = p[i * 2], z0 = p[i * 2 + 1], x1 = p[j * 2], z1 = p[j * 2 + 1];
+        const l = Math.hypot(x1 - x0, z1 - z0); if (l < 0.05) continue;
+        const nx = (z1 - z0) / l * outward, nz = -(x1 - x0) / l * outward;
+        const a = gb.v(x0, h, z0, nx, 0, nz, pc[0], pc[1], pc[2], exP), b = gb.v(x1, h, z1, nx, 0, nz, pc[0], pc[1], pc[2], exP);
+        const t1 = gb.v(x1, h + ph, z1, nx, 0.2, nz, pc[0], pc[1], pc[2], exP), t0 = gb.v(x0, h + ph, z0, nx, 0.2, nz, pc[0], pc[1], pc[2], exP);
+        if (outward > 0) { gb.tri(a, t1, b); gb.tri(a, t0, t1); gb.tri(a, b, t1); gb.tri(a, t1, t0); } else { gb.tri(a, b, t1); gb.tri(a, t1, t0); gb.tri(a, t1, b); gb.tri(a, t0, t1); }
+      }
+    }
     // roof
-    const pitched = kind === 1 && area < 260 && n <= 8;
     if (pitched) { this._gableRoof(gb, B, h, c, rnd, area); return; }
     const contour = [];
     for (let i = 0; i < n; i++) contour.push(new THREE.Vector2(p[i * 2], p[i * 2 + 1]));
@@ -506,7 +595,8 @@ export class World {
     const P = (u, w) => [u * ax + w * bx, u * az + w * bz];
     const rh = Math.min(2.6, (w1 - w0) * 0.38);
     const wm = (w0 + w1) / 2;
-    const rc = hexColor(PAL.roofHouse[Math.floor(rnd() * PAL.roofHouse.length)]);
+    let rc = hexColor(PAL.roofHouse[Math.floor(rnd() * PAL.roofHouse.length)]);
+    if (B.roofColour) { try { const oc = new THREE.Color(B.roofColour); rc = [oc.r, oc.g, oc.b]; } catch (e) { /* ignore */ } }
     const ex = { aInfo: [0, 0], aWin: [0, 0] };
     const yb = h - 0.05;
     const c00 = P(u0, w0), c10 = P(u1, w0), c11 = P(u1, w1), c01 = P(u0, w1), r0 = P(u0, wm), r1 = P(u1, wm);
@@ -541,6 +631,8 @@ export class World {
   }
 
   setNight(n) {
+    if (Math.abs((this.night || 0) - n) > 0.02) for (const L of this.live.values()) if (L.signMat) L.signMat.emissiveIntensity = 0.05 + n * 0.9;
+    this.night = n;
     U.uNight.value = n;
     this.mat.lampGlow.emissiveIntensity = n * 3.0;
     this.mat.lampGlow.color.setScalar(0.2 + n * 0.8);

@@ -1,0 +1,24 @@
+# Deploys the game to Firebase Hosting (https://bskdrive.web.app) on every push.
+# One-time setup: create a Firebase project with the ID "bskdrive" and add the repository
+# secret FIREBASE_SERVICE_ACCOUNT (Firebase console → Project settings → Service accounts → JSON key).
+name: Deploy to Firebase Hosting
+on:
+  push:
+    branches: [main, master, claude/festive-shannon-42kaix]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: env.HAS_SA != 'true'
+        run: echo "FIREBASE_SERVICE_ACCOUNT secret not set yet – skipping deploy."
+      - if: env.HAS_SA == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: bskdrive
+          channelId: live

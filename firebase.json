@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "site": "bskdrive",
+    "public": ".",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "src/**", "tools/**", "package*.json", "README.md"],
+    "headers": [
+      { "source": "**/*.@(js|css)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
+    ]
+  }
+}

@@ -203,7 +203,7 @@ export class Pedestrians {
       // ---- dodge the player's car
       const rx = p.x - px, rz = p.z - pz;
       const fwd = rx * pfx + rz * pfz, lat = rx * pfz - rz * pfx;
-      if (psp > 2.5 && fwd > -1 && fwd < 4 + psp * 0.45 && Math.abs(lat) < 2.4) {
+      if (!p.fixed && psp > 2.5 && fwd > -1 && fwd < 4 + psp * 0.45 && Math.abs(lat) < 2.4) {
         if (p.dodge <= 0) { p.dodge = 0.9; p.dside = lat >= 0 ? 1 : -1; p.scream = true; }
       }
       if (p.dodge > 0) {
@@ -215,7 +215,7 @@ export class Pedestrians {
       }
       // hard separation: never let the car pass through a person
       const dd = Math.hypot(rx, rz);
-      if (dd < 2.2 && dd > 0.01) {
+      if (!p.fixed && dd < 2.2 && dd > 0.01) {
         const push = (2.2 - dd);
         p.x += rx / dd * push; p.z += rz / dd * push;
         if (p.mode === 'walk') { p.ex += rx / dd * push; p.ez += rz / dd * push; }

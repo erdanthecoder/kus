@@ -26,7 +26,7 @@ export const PLACES = [
 export class Game {
   constructor(map, hud, audio) {
     this.map = map; this.hud = hud; this.audio = audio;
-    this.money = 20000;
+    this.money = 3000;
     this.fines = [];
     this.speedState = { armed: true, over: 0, lastFine: -100, maxSpeed: 0 };
     this.redCooldown = 0;
@@ -60,11 +60,11 @@ export class Game {
   _load() {
     try {
       const s = JSON.parse(localStorage.getItem('bishkekDrive') || 'null');
-      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; }
+      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; }
     } catch (e) { /* storage unavailable */ }
   }
   save(car) {
-    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: car?.type, color: car?.color })); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0 })); } catch (e) { /* ignore */ }
   }
 
   issueFine(kind, amount, detail, photo) {
@@ -86,7 +86,7 @@ export class Game {
       if (S.armed && S.over > 0.6) {
         S.armed = false; S.lastFine = this.time;
         const v = Math.round(S.maxSpeed);
-        const amount = v > 200 ? 7500 : v > 170 ? 5000 : 3000;
+        const amount = v > 200 ? 750 : v > 170 ? 500 : 300;
         const where = info.street ? ` on ${info.street}` : '';
         requestPhoto((photo) => this.issueFine('Speeding', amount, `${v} km/h in a 150 km/h zone${where}`, photo));
       }
@@ -111,7 +111,7 @@ export class Game {
           const lat = dir ? -r.lat : r.lat;
           if ((r.e.ow || lat > -0.5) && this.map.signalState(sg.cluster, sg.group, this.trafficTime) === 'R') {
             this.redCooldown = 8;
-            requestPhoto((photo) => this.issueFine('Red light', 1000, `Ran a red light${info.street ? ' on ' + info.street : ''}`, photo));
+            requestPhoto((photo) => this.issueFine('Red light', 100, `Ran a red light${info.street ? ' on ' + info.street : ''}`, photo));
           }
         }
       }
@@ -126,7 +126,7 @@ export class Game {
       if (dot < -0.75) { this.wrongWay += dt; } else this.wrongWay = 0;
       if (this.wrongWay > 2.5 && this.wrongCooldown <= 0) {
         this.wrongCooldown = 20; this.wrongWay = 0;
-        requestPhoto((photo) => this.issueFine('Wrong way', 1500, `Driving against traffic on one-way ${info.street || 'street'}`, photo));
+        requestPhoto((photo) => this.issueFine('Wrong way', 150, `Driving against traffic on one-way ${info.street || 'street'}`, photo));
       }
       info.wrongWay = dot < -0.75;
     } else { this.wrongWay = 0; info.wrongWay = false; }
@@ -137,7 +137,7 @@ export class Game {
       info.runway = true;
       if (this.runwayT > 4 && this.runwayCooldown <= 0) {
         this.runwayCooldown = 30;
-        requestPhoto((photo) => this.issueFine('Runway incursion', 10000, 'Entered the active runway at Manas International Airport', photo));
+        requestPhoto((photo) => this.issueFine('Runway incursion', 1000, 'Entered the active runway at Manas International Airport', photo));
       }
     } else { this.runwayT = 0; info.runway = false; }
   }
@@ -207,7 +207,7 @@ export class Game {
         const total = M.fare + bonus;
         this.money += total;
         this.audio.cash();
-        this.hud.toast(`Fare paid: ${fmt(M.fare)} сом${bonus ? ` + ${fmt(bonus)} сом fast-ride tip` : ''}. Rahmat!`, 5);
+        this.hud.toast(`Fare paid: ${fmt(M.fare)} coins. Rahmat!`, 5);
         this.mission = null;
         this.clearRoute();
       }

@@ -3,139 +3,149 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Bishkek Drive</title>
-<meta name="description" content="Open-world driving game on the real streets of Bishkek, Kyrgyzstan – built from OpenStreetMap data.">
+<title>BskDrive · Bishkek Drive</title>
+<meta name="description" content="Multiplayer open-world driving game on the real streets of Bishkek, Kyrgyzstan – built from OpenStreetMap data.">
+<meta name="theme-color" content="#0b0e12">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --acc: #3fc8ff; --red: #ff4545; --gold: #f2c200; --panel: rgba(12, 16, 22, 0.78); --line: rgba(255,255,255,0.12); }
+  :root { --acc: #3fc8ff; --red: #ff4545; --gold: #f2c200; --panel: rgba(10, 13, 18, 0.62); --line: rgba(255,255,255,0.10); }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; color: #e9eef3; font-family: Inter, system-ui, Arial, sans-serif; user-select: none; -webkit-user-select: none; }
   #app canvas { display: block; }
   .hidden { display: none !important; }
-  button { font-family: inherit; cursor: pointer; }
+  button, input, select { font-family: inherit; }
+  button { cursor: pointer; }
 
-  /* loading + title */
-  #loading, #menu { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+  /* ---------- loading & title ---------- */
+  #loading, #menu { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
   #loading { background: radial-gradient(ellipse at 50% 120%, #2a3a4a 0%, #0b0e12 60%); }
-  #menu { background: linear-gradient(180deg, rgba(8,12,18,0.55), rgba(8,12,18,0.85)); backdrop-filter: blur(2px); }
-  .logo { font-weight: 800; font-size: clamp(38px, 8vw, 86px); letter-spacing: 0.04em; line-height: 0.95; text-align: center; text-shadow: 0 6px 30px rgba(0,0,0,0.5); }
+  #menu { background: linear-gradient(180deg, rgba(6,9,14,0.25), rgba(6,9,14,0.8)); }
+  .logo { font-weight: 800; font-size: clamp(40px, 9vw, 92px); letter-spacing: 0.02em; line-height: 0.95; text-align: center; text-shadow: 0 6px 30px rgba(0,0,0,0.5); }
   .logo span { color: var(--red); }
-  .logo small { display: block; font-size: 0.22em; letter-spacing: 0.5em; color: #9fb2c4; font-weight: 600; margin-top: 10px; }
-  .mtn { width: min(560px, 86vw); height: 90px; margin: 18px 0 8px; }
-  #loadBarWrap { width: min(420px, 80vw); height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-top: 18px; }
+  .logo small { display: block; font-size: 0.18em; letter-spacing: 0.55em; color: #a9bccd; font-weight: 600; margin-top: 12px; }
+  #loadBarWrap { width: min(380px, 80vw); height: 4px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-top: 26px; }
   #loadBar { height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--gold)); transition: width .3s; }
-  #loadText { margin-top: 12px; color: #9fb2c4; font-size: 13px; text-align: center; padding: 0 16px; }
-  .menuBox { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; width: min(720px, 92vw); margin-top: 22px; max-height: 60vh; overflow: auto; }
-  .menuBox h3 { margin: 4px 0 10px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8fa3b6; }
-  .bigBtn { background: linear-gradient(135deg, #e8112d, #b30c22); color: #fff; border: 0; border-radius: 12px; padding: 16px 44px; font-size: 20px; font-weight: 800; letter-spacing: .06em; margin-top: 18px; box-shadow: 0 10px 30px rgba(232,17,45,.35); }
+  #loadText { margin-top: 12px; color: #8fa3b6; font-size: 12px; text-align: center; }
+  .startCard { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: min(360px, 90vw); }
+  .startCard input { background: rgba(255,255,255,0.08); border: 1px solid var(--line); color: #fff; border-radius: 12px; padding: 14px 16px; font-size: 16px; outline: none; text-align: center; }
+  .bigBtn { background: linear-gradient(135deg, #e8112d, #b30c22); color: #fff; border: 0; border-radius: 12px; padding: 16px; font-size: 18px; font-weight: 800; letter-spacing: .08em; box-shadow: 0 10px 30px rgba(232,17,45,.35); }
   .bigBtn:hover { filter: brightness(1.1); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
-  .carCard { text-align: left; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: #fff; border-radius: 10px; padding: 10px 12px; }
-  .carCard small { display: block; color: #93a4b5; font-size: 11px; margin-top: 3px; }
-  .carCard.sel { border-color: var(--acc); background: rgba(63,200,255,0.12); }
-  .sws { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); }
-  .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; font-size: 13px; color: #c5d0da; }
-  kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 5px; background: #233040; border: 1px solid #3a4a5a; font: 600 11px Inter, monospace; color: #fff; text-align: center; margin-right: 4px; }
-  .muted { color: #8fa3b6; font-size: 13px; }
+  .smallRow { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #a9bccd; }
+  .credit { position: fixed; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(255,255,255,.45); }
 
-  /* HUD */
-  #hudRoot { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
-  #topLeft { position: absolute; left: 16px; top: 14px; display: flex; flex-direction: column; gap: 8px; }
-  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; backdrop-filter: blur(6px); }
-  #money { font-weight: 800; font-size: 20px; color: #7dffa0; }
-  #money.neg { color: var(--red); }
-  #finecount { font-size: 12px; color: #ffb0a0; margin-top: 2px; }
-  #mission { max-width: 330px; font-size: 13px; line-height: 1.35; }
-  #mission small { display: block; color: #93a4b5; font-size: 11px; margin-top: 2px; }
-  #topCenter { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
-  #street { font-weight: 700; font-size: 17px; padding: 7px 16px; }
-  #district { font-size: 12px; color: #c0ccd8; margin-top: 4px; text-shadow: 0 1px 3px #000; }
-  #topRight { position: absolute; right: 16px; top: 14px; text-align: right; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-  #clock { font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
-  #jam { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
-  .jam1 { background: rgba(60,180,90,.85); } .jam2 { background: rgba(230,160,30,.9); } .jam3 { background: rgba(220,40,40,.92); }
-  #speedo { position: absolute; right: 14px; bottom: 14px; width: 210px; height: 210px; }
-  #limit { position: absolute; right: 214px; bottom: 30px; width: 58px; height: 58px; border-radius: 50%; background: #fff; border: 7px solid #d71920; color: #111; font-weight: 800; font-size: 19px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
-  #limit.over { animation: pulse .5s infinite alternate; }
-  @keyframes pulse { to { transform: scale(1.18); box-shadow: 0 0 30px rgba(255,40,40,.9); } }
-  #minimap { position: absolute; left: 14px; bottom: 14px; width: 210px; height: 210px; border-radius: 50%; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
-  #warn { position: absolute; top: 92px; left: 50%; transform: translateX(-50%) scale(.9); padding: 8px 18px; border-radius: 10px; background: rgba(200,20,20,.88); font-weight: 800; font-size: 14px; letter-spacing: .05em; opacity: 0; transition: .2s; }
-  #warn.show { opacity: 1; transform: translateX(-50%) scale(1); }
-  #toast { position: absolute; bottom: 240px; left: 50%; transform: translateX(-50%) translateY(20px); max-width: min(620px, 90vw); text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 18px; font-size: 14px; opacity: 0; transition: .35s; }
-  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  #hint { position: absolute; bottom: 300px; left: 50%; transform: translateX(-50%); background: rgba(63,200,255,.9); color: #001522; font-weight: 800; padding: 8px 16px; border-radius: 10px; opacity: 0; transition: .2s; }
+  /* ---------- minimal HUD ---------- */
+  #hudRoot { position: fixed; inset: 0; pointer-events: none; z-index: 10; transition: opacity .3s; }
+  #hudRoot.off { opacity: 0; }
+  .pill { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #coins { position: absolute; left: 14px; top: 14px; font-weight: 800; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+  #coins i { font-style: normal; display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe680, #d9a200); box-shadow: inset 0 0 0 2px #b98a00; }
+  #coins.neg { color: var(--red); }
+  #coins.pop { animation: pop .6s; }
+  @keyframes pop { 30% { transform: scale(1.18); color: #7dffa0; } }
+  #mission { position: absolute; left: 14px; top: 54px; font-size: 13px; opacity: 0; transform: translateY(-6px); transition: .3s; max-width: 70vw; }
+  #mission.show { opacity: 1; transform: none; }
+  #clock { position: absolute; right: 14px; top: 14px; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; display: flex; gap: 6px; align-items: center; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-left: 4px; }
+  .dot.on { background: #3ddc84; box-shadow: 0 0 8px #3ddc84; }
+  #street { position: absolute; top: 14px; left: 50%; transform: translate(-50%, -8px); font-weight: 700; font-size: 15px; text-align: center; opacity: 0; transition: .45s; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+  #street small { display: block; font-weight: 500; font-size: 11px; color: #c4d0dc; margin-top: 2px; }
+  #street.show { opacity: 1; transform: translate(-50%, 0); }
+  #speedo { position: absolute; right: 12px; bottom: 12px; width: 168px; height: 168px; }
+  #limit { position: absolute; right: 186px; bottom: 26px; width: 50px; height: 50px; border-radius: 50%; background: #fff; border: 6px solid #d71920; color: #111; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center; opacity: 0; transform: scale(.6); transition: .25s; }
+  #limit.show { opacity: 1; transform: scale(1); }
+  #limit.over { animation: pulse .45s infinite alternate; }
+  @keyframes pulse { to { transform: scale(1.15); box-shadow: 0 0 26px rgba(255,40,40,.9); } }
+  #minimap { position: absolute; left: 12px; bottom: 12px; width: 168px; height: 168px; border-radius: 50%; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  #warn { position: absolute; top: 46px; left: 50%; transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(200,20,20,.9); font-weight: 800; font-size: 13px; letter-spacing: .06em; opacity: 0; transition: .2s; }
+  #warn.show { opacity: 1; }
+  #toast { position: absolute; bottom: 196px; left: 50%; transform: translateX(-50%) translateY(10px); max-width: min(560px, 90vw); text-align: center; font-size: 14px; opacity: 0; transition: .35s; }
+  #toast.show { opacity: 1; transform: translateX(-50%); }
+  #hint { position: absolute; bottom: 236px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0; transition: .2s; }
   #hint.show { opacity: 1; }
+  #chat { position: absolute; left: 14px; bottom: 192px; width: min(360px, 60vw); font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+  #chat div { text-shadow: 0 1px 4px #000; transition: opacity 1s; }
+  #chat b { color: var(--acc); }
+  #chatInput { position: fixed; left: 14px; bottom: 190px; width: min(360px, 70vw); z-index: 30; pointer-events: auto; background: rgba(10,14,20,.85); color: #fff; border: 1px solid var(--acc); border-radius: 10px; padding: 9px 12px; font-size: 14px; outline: none; }
   .flightmode #minimap, .flightmode #speedo, .flightmode #limit, .flightmode #mission { display: none; }
+  .nomini #minimap { display: none; }
 
   /* fine card */
   #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 30; }
   #flash.go { animation: flash .6s ease-out; }
-  @keyframes flash { 0% { opacity: .95; } 15% { opacity: .1; } 25% { opacity: .8; } 100% { opacity: 0; } }
-  #fine { position: absolute; top: 120px; right: 26px; width: 300px; background: #fffef6; color: #1a1a1a; border-radius: 10px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.5); transform: translateX(360px) rotate(4deg); transition: transform .55s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes flash { 0% { opacity: .9; } 15% { opacity: .1; } 25% { opacity: .75; } 100% { opacity: 0; } }
+  #fine { position: absolute; top: 60px; right: 18px; width: 250px; background: #fffef6; color: #1a1a1a; border-radius: 10px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.5); transform: translateX(320px) rotate(4deg); transition: transform .55s cubic-bezier(.2,1.4,.4,1); }
   #fine.show { transform: translateX(0) rotate(-1.5deg); }
-  #fine .fh { background: #c8102e; color: #fff; padding: 8px 12px; font-weight: 800; font-size: 12px; letter-spacing: .1em; display: flex; justify-content: space-between; }
+  #fine .fh { background: #c8102e; color: #fff; padding: 6px 10px; font-weight: 800; font-size: 11px; letter-spacing: .1em; }
   #finePhoto { width: 100%; display: block; filter: contrast(1.1) saturate(.8); }
-  #fine .fb { padding: 10px 12px; }
-  #fineKind { font-weight: 800; font-size: 13px; color: #c8102e; letter-spacing: .08em; }
-  #fineAmt { font-weight: 800; font-size: 28px; margin: 2px 0; }
-  #fineDetail { font-size: 12px; }
-  #fineTime { font-size: 10px; color: #777; margin-top: 6px; }
-  .stamp { position: absolute; right: 12px; bottom: 34px; border: 3px solid #c8102e; color: #c8102e; font-weight: 800; padding: 2px 8px; transform: rotate(-14deg); font-size: 15px; opacity: .8; }
-
-  /* discovery */
-  #discover { position: absolute; left: 50%; top: 18%; transform: translateX(-50%) scale(.8); opacity: 0; width: min(520px, 90vw); background: linear-gradient(135deg, rgba(20,30,44,.94), rgba(30,20,20,.94)); border: 1px solid rgba(242,194,0,.5); border-radius: 16px; padding: 16px 20px; text-align: center; transition: .45s cubic-bezier(.2,1.3,.4,1); }
+  #fine .fb { padding: 8px 10px; }
+  #fineKind { font-weight: 800; font-size: 12px; color: #c8102e; letter-spacing: .08em; }
+  #fineAmt { font-weight: 800; font-size: 22px; }
+  #fineDetail { font-size: 11px; } #fineTime { font-size: 10px; color: #777; margin-top: 4px; }
+  #discover { position: absolute; left: 50%; top: 70px; transform: translateX(-50%) scale(.9); opacity: 0; width: min(440px, 90vw); text-align: center; transition: .45s cubic-bezier(.2,1.3,.4,1); text-shadow: 0 2px 10px rgba(0,0,0,.9); }
   #discover.show { opacity: 1; transform: translateX(-50%) scale(1); }
-  #discName { font-weight: 800; font-size: 26px; color: var(--gold); }
-  #discLocal { color: #b8c4d0; font-size: 14px; }
-  #discFact { margin-top: 8px; font-size: 14px; line-height: 1.45; }
-  #discCount { margin-top: 8px; font-size: 12px; color: #7dffa0; font-weight: 700; }
+  #discName { font-weight: 800; font-size: 24px; color: var(--gold); }
+  #discLocal { color: #d8e0e8; font-size: 13px; }
+  #discFact { margin-top: 6px; font-size: 13px; line-height: 1.4; }
+  #discCount { margin-top: 6px; font-size: 11px; color: #7dffa0; font-weight: 700; }
 
-  /* panels */
-  .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(5,8,12,.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
-  .panel { background: rgba(14,19,26,.96); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; width: min(980px, 94vw); max-height: 90vh; overflow: auto; }
-  .panel h2 { margin: 0 0 4px; font-size: 22px; }
-  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 12px; }
-  .panel h3 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #8fa3b6; margin: 12px 0 8px; }
-  .row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
-  .row label { width: 120px; color: #b8c4d0; }
-  .row input[type=range] { flex: 1; }
-  .btn { background: #223142; color: #fff; border: 1px solid #34485c; border-radius: 9px; padding: 9px 14px; font-weight: 700; font-size: 13px; }
+  /* ---------- menus ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(5,8,12,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 12px; }
+  .panel { background: rgba(14,18,24,.96); border: 1px solid var(--line); border-radius: 18px; width: min(860px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+  .tabs { display: flex; gap: 4px; padding: 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tab { background: none; border: 0; color: #9fb0c0; padding: 9px 14px; border-radius: 10px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .tab.on { background: rgba(255,255,255,.08); color: #fff; }
+  .tabs .grow { flex: 1; }
+  .body { padding: 16px 18px; overflow: auto; }
+  .page { display: none; } .page.on { display: block; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .card { text-align: left; background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: #fff; border-radius: 14px; padding: 14px; }
+  .card:hover { border-color: rgba(255,255,255,.3); }
+  .card .ic { font-size: 26px; } .card b { display: block; font-size: 15px; margin-top: 6px; } .card small { display: block; color: #93a4b5; font-size: 12px; margin-top: 4px; line-height: 1.35; }
+  .card.sel { border-color: var(--acc); background: rgba(63,200,255,0.10); }
+  .card .price { margin-top: 8px; font-weight: 800; color: var(--gold); font-size: 13px; }
+  .card.locked { opacity: .75; }
+  .sws { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.35); }
+  .set { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 28px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 14px; }
+  .row label { color: #cdd7e0; }
+  .row input[type=range] { width: 150px; accent-color: var(--acc); }
+  .row select, .row input[type=text] { background: #1b2430; color: #fff; border: 1px solid #2c3a4a; border-radius: 8px; padding: 6px 8px; }
+  .tog { position: relative; width: 42px; height: 24px; border-radius: 12px; background: #2c3a4a; border: 0; flex: none; }
+  .tog::after { content: ''; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .2s; }
+  .tog.on { background: var(--acc); } .tog.on::after { left: 21px; }
+  h4 { margin: 18px 0 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #7f93a6; }
+  .btn { background: #223142; color: #fff; border: 1px solid #34485c; border-radius: 10px; padding: 9px 14px; font-weight: 700; font-size: 13px; }
   .btn.pri { background: var(--acc); color: #001522; border-color: var(--acc); }
-  .btn.red { background: #8a1a24; border-color: #b02a34; }
-  .place { display: flex; justify-content: space-between; align-items: baseline; width: 100%; text-align: left; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: #fff; border-radius: 8px; padding: 7px 10px; margin-bottom: 4px; font-size: 13px; }
-  .place small { color: #8fa3b6; font-size: 11px; }
-  .place.done { color: #7dffa0; }
-  .fineRow { border-bottom: 1px solid var(--line); padding: 6px 0; font-size: 13px; display: grid; grid-template-columns: 1fr auto; }
-  .fineRow span { color: #ff8a80; font-weight: 700; }
-  .fineRow small { grid-column: 1 / -1; color: #8fa3b6; }
-  #mapPanel { position: fixed; inset: 3vh 3vw; z-index: 45; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .lb { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lb td, .lb th { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+  .lb th { color: #7f93a6; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .lb tr.me td { color: var(--acc); font-weight: 700; }
+  .muted { color: #8fa3b6; font-size: 13px; line-height: 1.5; }
+  .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; font-size: 13px; color: #c5d0da; }
+  kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 5px; background: #233040; border: 1px solid #3a4a5a; font: 600 11px Inter, monospace; color: #fff; text-align: center; margin-right: 4px; }
+  .place { display: flex; justify-content: space-between; width: 100%; text-align: left; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: #fff; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; font-size: 13px; }
+  .place.done { color: #7dffa0; } .place small { color: #8fa3b6; }
+  #mapPanel { position: fixed; inset: 2vh 2vw; z-index: 45; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
   #bigmap { width: 100%; height: 100%; display: block; cursor: crosshair; }
   #mapClose { position: absolute; right: 12px; top: 12px; }
-  #mapHelp { position: absolute; left: 12px; top: 12px; font-size: 12px; background: var(--panel); padding: 8px 12px; border-radius: 10px; color: #c5d0da; }
+  #mapHelp { position: absolute; left: 12px; top: 12px; font-size: 12px; color: #c5d0da; }
   #fids { width: 100%; border-collapse: collapse; font: 600 13px 'Courier New', monospace; background: #050608; color: #ffcc33; border-radius: 8px; overflow: hidden; }
-  #fids th { text-align: left; color: #8a9aaa; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid #222; }
-  #fids td { padding: 5px 8px; border-bottom: 1px solid #111; }
-  #fids td.red { color: #ff5050; }
-  .apOpts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
-  .apOpt { text-align: left; background: rgba(63,200,255,.08); border: 1px solid rgba(63,200,255,.35); color: #fff; border-radius: 12px; padding: 14px; }
-  .apOpt b { font-size: 15px; display: block; } .apOpt small { color: #a8b8c8; }
+  #fids th { text-align: left; color: #8a9aaa; font-size: 11px; padding: 6px 8px; } #fids td { padding: 5px 8px; border-top: 1px solid #111; } #fids td.red { color: #ff5050; }
   #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .7s; z-index: 60; }
   #fade.on { opacity: 1; }
-  #flightHud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
-  #flightHud .chip { text-align: center; min-width: 96px; }
-  #flightHud b { display: block; font-size: 20px; } #flightHud small { font-size: 10px; color: #8fa3b6; text-transform: uppercase; letter-spacing: .1em; }
-  #boarding { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.7); opacity: 0; transition: .6s cubic-bezier(.2,1.3,.4,1); z-index: 41; width: min(560px, 90vw); background: #fff; color: #111; border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: 1fr 140px; box-shadow: 0 30px 80px rgba(0,0,0,.6); pointer-events: none; }
+  #flightHud { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; font-size: 13px; }
+  #flightHud .pill b { font-size: 15px; }
+  #boarding { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.7); opacity: 0; transition: .6s cubic-bezier(.2,1.3,.4,1); z-index: 41; width: min(520px, 90vw); background: #fff; color: #111; border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: 1fr 120px; box-shadow: 0 30px 80px rgba(0,0,0,.6); pointer-events: none; }
   #boarding.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #boarding .l { padding: 16px 18px; } #boarding .r { background: #c8102e; color: #fff; padding: 16px; border-left: 2px dashed #fff; }
-  #boarding h4 { margin: 0; letter-spacing: .2em; font-size: 11px; color: #c8102e; } #boarding .big { font-size: 34px; font-weight: 800; }
+  #boarding h4 { margin: 0; color: #c8102e; } #boarding .big { font-size: 30px; font-weight: 800; }
   #touch { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
-  #touch button { pointer-events: auto; position: absolute; width: 74px; height: 74px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.35); color: #fff; font-size: 22px; font-weight: 800; }
+  #touch button { pointer-events: auto; position: absolute; width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); background: rgba(0,0,0,.3); color: #fff; font-size: 22px; font-weight: 800; }
   @media (max-width: 720px) {
-    #speedo, #minimap { width: 140px; height: 140px; } #limit { right: 150px; width: 46px; height: 46px; font-size: 15px; bottom: 18px; }
-    #street { font-size: 13px; } #mission { max-width: 200px; font-size: 11px; } #fine { width: 230px; }
-    #topCenter { top: 70px; width: 90vw; }
+    #speedo, #minimap { width: 120px; height: 120px; } #limit { right: 136px; width: 42px; height: 42px; font-size: 13px; }
+    #toast { bottom: 150px; } #chat { bottom: 140px; } #fine { width: 200px; }
   }
 </style>
 </head>
@@ -143,84 +153,83 @@
 <div id="app"></div>
 
 <div id="loading">
-  <div class="logo">BISHKEK <span>DRIVE</span><small>KYRGYZSTAN · OPEN WORLD</small></div>
-  <svg class="mtn" viewBox="0 0 560 90"><path d="M0 90 L60 52 L95 66 L150 20 L190 48 L230 30 L270 8 L310 38 L350 22 L400 50 L440 28 L490 56 L530 40 L560 60 L560 90Z" fill="#2c3e50"/><path d="M150 20 L163 30 L172 26 L180 36 L190 48 L230 30 L242 22 L270 8 L284 22 L292 18 L310 38 L350 22 L362 32 L372 28 L400 50" fill="none" stroke="#e8f0f8" stroke-width="5" stroke-linejoin="round" opacity=".85"/></svg>
+  <div class="logo">Bsk<span>Drive</span><small>BISHKEK · KYRGYZSTAN</small></div>
   <div id="loadBarWrap"><div id="loadBar"></div></div>
   <div id="loadText">Loading…</div>
 </div>
 
 <div id="menu" class="hidden">
-  <div class="logo">BISHKEK <span>DRIVE</span><small>THE REAL STREETS OF BISHKEK</small></div>
-  <button class="bigBtn" id="startBtn">START DRIVING</button>
-  <div class="menuBox">
-    <h3>Choose your car</h3>
-    <div class="grid" id="garage"></div>
-    <div class="sws" id="colors"></div>
-    <h3 style="margin-top:16px">Rules of the road</h3>
-    <p class="muted" style="margin:0">Speed limit: <b style="color:#fff">150 km/h</b>. Bishkek's "Safe City" cameras photograph every violation – speeding (3 000–7 500 сом), running red lights (1 000 сом), wrong way on one-way streets (1 500 сом) and entering the runway at Manas airport (10 000 сом).</p>
-    <h3 style="margin-top:16px">Controls</h3>
-    <div class="keys">
-      <div><kbd>W</kbd><kbd>S</kbd> accelerate / brake / reverse</div><div><kbd>A</kbd><kbd>D</kbd> steer</div>
-      <div><kbd>Space</kbd> handbrake (drift)</div><div><kbd>H</kbd> horn</div>
-      <div><kbd>C</kbd> camera</div><div><kbd>RMB</kbd> drag to look around</div>
-      <div><kbd>M</kbd> city map &amp; GPS</div><div><kbd>J</kbd> taxi job</div>
-      <div><kbd>E</kbd> interact (airport)</div><div><kbd>R</kbd> reset car to road</div>
-      <div><kbd>[</kbd><kbd>]</kbd> change time of day</div><div><kbd>Esc</kbd> pause / settings</div>
-    </div>
+  <div class="logo">Bsk<span>Drive</span><small>THE REAL STREETS OF BISHKEK</small></div>
+  <div class="startCard">
+    <input id="nameInput" maxlength="18" placeholder="Your driver name">
+    <button class="bigBtn" id="startBtn">DRIVE</button>
+    <div class="smallRow"><span>Online multiplayer</span><button class="tog on" id="mpToggle"></button></div>
   </div>
+  <div class="credit">Map data © OpenStreetMap contributors · Esc for menu · J for jobs</div>
 </div>
 
 <div id="hudRoot">
-  <div id="topLeft">
-    <div class="chip"><div id="money">20 000 сом</div><div id="finecount">No fines</div></div>
-    <div class="chip" id="mission"></div>
-  </div>
-  <div id="topCenter"><div class="chip hidden" id="street"></div><div id="district"></div></div>
-  <div id="topRight"><div class="chip"><div id="clock">08:30</div></div><div id="jam" class="jam1">Traffic flowing</div></div>
+  <div id="coins" class="pill"><i></i><span id="money">0</span></div>
+  <div id="mission" class="pill"></div>
+  <div id="clock" class="pill">08:30</div>
+  <div id="street"></div>
   <div id="warn"></div>
-  <div id="hint"></div>
-  <div id="toast"></div>
+  <div id="hint" class="pill"></div>
+  <div id="toast" class="pill"></div>
+  <div id="chat"></div>
   <canvas id="minimap"></canvas>
   <div id="limit">150</div>
   <canvas id="speedo"></canvas>
-  <div id="fine"><div class="fh"><span>ШТРАФ · FINE</span><span>KG</span></div><img id="finePhoto" alt=""><div class="fb"><div id="fineKind"></div><div id="fineAmt"></div><div id="fineDetail"></div><div id="fineTime"></div></div><div class="stamp">ПДД</div></div>
-  <div id="discover"><div style="font-size:11px;letter-spacing:.3em;color:#b8c4d0">LANDMARK DISCOVERED</div><div id="discName"></div><div id="discLocal"></div><div id="discFact"></div><div id="discCount"></div></div>
+  <div id="fine"><div class="fh">ШТРАФ · FINE · SAFE CITY</div><img id="finePhoto" alt=""><div class="fb"><div id="fineKind"></div><div id="fineAmt"></div><div id="fineDetail"></div><div id="fineTime"></div></div></div>
+  <div id="discover"><div style="font-size:10px;letter-spacing:.3em;color:#d8e0e8">LANDMARK</div><div id="discName"></div><div id="discLocal"></div><div id="discFact"></div><div id="discCount"></div></div>
   <div id="flightHud" class="hidden">
-    <div class="chip"><small>Altitude</small><b id="fhAlt">0</b></div>
-    <div class="chip"><small>Speed</small><b id="fhSpd">0</b></div>
-    <div class="chip"><small>Heading</small><b id="fhHdg">0</b></div>
-    <div class="chip" style="min-width:220px"><small>Status</small><b id="fhStage" style="font-size:14px"></b></div>
-    <div class="chip"><small>Camera [C]</small><b id="fhCam" style="font-size:14px"></b><small>Esc – skip</small></div>
+    <div class="pill">ALT <b id="fhAlt">0</b></div><div class="pill">SPD <b id="fhSpd">0</b></div><div class="pill">HDG <b id="fhHdg">0</b></div>
+    <div class="pill"><b id="fhStage" style="font-size:13px"></b></div><div class="pill">C: <b id="fhCam" style="font-size:13px"></b> · Esc skip</div>
   </div>
 </div>
+<input id="chatInput" class="hidden" maxlength="120" placeholder="Say something… (Enter to send, Esc to cancel)">
 <div id="flash"></div>
 
 <div id="pause" class="overlay hidden">
   <div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <h2>Paused</h2>
-      <div style="display:flex;gap:8px"><button class="btn" id="resetBtn">Back to Ala-Too Square</button><button class="btn pri" id="resume">Resume</button></div>
+    <div class="tabs">
+      <button class="tab on" data-p="pJobs">Jobs</button>
+      <button class="tab" data-p="pGarage">Garage</button>
+      <button class="tab" data-p="pOnline">Online</button>
+      <button class="tab" data-p="pPlaces">Places</button>
+      <button class="tab" data-p="pSettings">Settings</button>
+      <button class="tab" data-p="pHelp">Help</button>
+      <span class="grow"></span>
+      <button class="btn pri" id="resume">Resume</button>
     </div>
-    <div class="cols">
-      <div>
-        <h3>Garage</h3><div class="grid" id="garage2"></div><div class="sws" id="colors2"></div>
-        <h3>Settings</h3>
-        <div class="row"><label>Traffic density</label><input type="range" id="setTraffic" min="0.2" max="2" step="0.1"></div>
-        <div class="row"><label>Pedestrians</label><input type="range" id="setPeds" min="0" max="2" step="0.1"></div>
-        <div class="row"><label>Day length</label><input type="range" id="setTimeSpeed" min="0" max="6" step="0.5"></div>
-        <div class="row"><label>Volume</label><input type="range" id="setVol" min="0" max="1" step="0.05" value="0.7"></div>
-        <div class="row"><label>Graphics</label><select id="setQuality" class="btn"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
-        <div class="row"><button class="btn red" id="clearSave">Reset progress</button></div>
+    <div class="body">
+      <div class="page on" id="pJobs">
+        <p class="muted" style="margin-top:0">Work to earn coins. Fines for speeding over 150 km/h, red lights and wrong-way driving are paid in coins too.</p>
+        <div class="cards" id="jobCards"></div>
+        <div id="jobNow" class="muted" style="margin-top:12px"></div>
       </div>
-      <div>
-        <h3>Landmarks <span id="placeCount"></span> · click to travel</h3>
-        <div id="placeList"></div>
+      <div class="page" id="pGarage">
+        <div class="cards" id="garage"></div>
+        <div class="sws" id="colors"></div>
       </div>
-      <div>
-        <h3>Fines</h3>
-        <div id="fineList"></div>
-        <h3>About</h3>
-        <p class="muted">Every street, building, park and traffic light comes from real OpenStreetMap data for Bishkek and Manas International Airport. Map data © OpenStreetMap contributors (ODbL).</p>
+      <div class="page" id="pOnline">
+        <div class="muted" id="netStatus"></div>
+        <table class="lb" id="lb"></table>
+        <p class="muted">Press <kbd>Enter</kbd> to chat, hold <kbd>Tab</kbd> to see who's online while driving.</p>
+      </div>
+      <div class="page" id="pPlaces"><div class="muted" id="placeCount"></div><div id="placeList"></div><h4>Fines</h4><div id="fineList"></div></div>
+      <div class="page" id="pSettings"><div id="settingsBox"></div></div>
+      <div class="page" id="pHelp">
+        <div class="keys">
+          <div><kbd>W</kbd><kbd>S</kbd> gas / brake · hold S to reverse</div><div><kbd>A</kbd><kbd>D</kbd> steer</div>
+          <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd><kbd>Ctrl</kbd> gear up / down (manual)</div>
+          <div><kbd>H</kbd> horn</div><div><kbd>C</kbd> camera · <kbd>RMB</kbd> look around</div>
+          <div><kbd>J</kbd> jobs</div><div><kbd>M</kbd> map &amp; GPS</div>
+          <div><kbd>E</kbd> interact (airport)</div><div><kbd>R</kbd> reset car</div>
+          <div><kbd>Enter</kbd> chat · <kbd>Tab</kbd> players</div><div><kbd>[</kbd><kbd>]</kbd> time of day</div>
+          <div><kbd>F1</kbd> hide HUD</div><div><kbd>Esc</kbd> menu</div>
+        </div>
+        <p class="muted">Every street, building, shop sign, bus stop and traffic light comes from real OpenStreetMap data of Bishkek and Manas airport. Map data © OpenStreetMap contributors (ODbL).</p>
       </div>
     </div>
   </div>
@@ -228,34 +237,35 @@
 
 <div id="mapPanel" class="hidden">
   <canvas id="bigmap"></canvas>
-  <div id="mapHelp">Drag to pan · wheel to zoom · <b>click</b> to set a GPS route · <b>Shift+click</b> to teleport</div>
+  <div id="mapHelp" class="pill">Drag · wheel zoom · <b>click</b> = GPS route · <b>Shift+click</b> = teleport</div>
   <button class="btn" id="mapClose">Close [M]</button>
 </div>
 
 <div id="airportMenu" class="overlay hidden">
-  <div class="panel" style="width:min(720px,94vw)">
-    <h2>✈ Manas International Airport · FRU</h2>
-    <p class="muted" style="margin:4px 0 12px">Departures &amp; arrivals</p>
-    <table id="fids"></table>
-    <div class="apOpts">
-      <button class="apOpt" id="apFlight"><b>🛫 Scenic flight over Bishkek</b><small>Board, take off from runway 07, fly over Ala-Too Square and the mountains, then land back. 2 500 сом</small></button>
-      <button class="apOpt" id="apSpot"><b>📷 Watch a landing</b><small>Watch from the runway fence as the next arrival touches down</small></button>
-      <button class="apOpt" id="apTaxi"><b>🚕 Airport taxi</b><small>Pick up an arriving passenger and drive them into the city</small></button>
+  <div class="panel" style="width:min(680px,94vw)">
+    <div class="body">
+      <h2 style="margin:0 0 10px">✈ Manas International Airport</h2>
+      <table id="fids"></table>
+      <div class="cards" style="margin-top:12px">
+        <button class="card" id="apFlight"><div class="ic">🛫</div><b>Scenic flight</b><small>Take off, fly over Bishkek and the mountains, land back</small><div class="price">500 coins</div></button>
+        <button class="card" id="apSpot"><div class="ic">📷</div><b>Watch a landing</b><small>From the runway fence</small></button>
+        <button class="card" id="apTaxi"><div class="ic">🚕</div><b>Airport taxi</b><small>Drive an arriving passenger into the city</small></button>
+      </div>
+      <div style="text-align:right;margin-top:12px"><button class="btn" id="apClose">Close</button></div>
     </div>
-    <div style="text-align:right;margin-top:12px"><button class="btn" id="apClose">Close</button></div>
   </div>
 </div>
 
-<div id="boarding"><div class="l"><h4>BOARDING PASS · ALA-TOO AIR</h4><div class="big">FRU → FRU</div><div>Flight AT 1991 · Scenic flight over Bishkek</div><div style="margin-top:8px;font-size:12px;color:#666">Gate 3 · Seat 12A (window) · Boarding now</div></div><div class="r"><div style="font-size:11px">SEAT</div><div class="big" style="color:#fff">12A</div><div style="font-size:11px;margin-top:6px">ZONE 1</div></div></div>
+<div id="boarding"><div class="l"><h4>BOARDING PASS</h4><div class="big">FRU → FRU</div><div>Flight AT 1991 · Scenic flight over Bishkek</div><div style="margin-top:8px;font-size:12px;color:#666">Gate 3 · Seat 12A (window)</div></div><div class="r"><div style="font-size:11px">SEAT</div><div class="big" style="color:#fff">12A</div></div></div>
 <div id="fade"></div>
 
 <div id="touch" class="hidden">
-  <button id="tLeft" style="left:18px;bottom:250px">◀</button><button id="tRight" style="left:104px;bottom:250px">▶</button>
-  <button id="tGas" style="right:24px;bottom:240px;background:rgba(40,160,80,.5)">▲</button><button id="tBrake" style="right:110px;bottom:240px;background:rgba(200,40,40,.5)">▼</button>
-  <button id="tHand" style="right:196px;bottom:240px;font-size:13px">HB</button>
-  <button id="tCam" style="right:24px;top:110px;font-size:13px;width:54px;height:54px">CAM</button>
-  <button id="tMap" style="right:84px;top:110px;font-size:13px;width:54px;height:54px">MAP</button>
-  <button id="tAct" style="right:144px;top:110px;font-size:15px;width:54px;height:54px">E</button>
+  <button id="tLeft" style="left:16px;bottom:200px">◀</button><button id="tRight" style="left:98px;bottom:200px">▶</button>
+  <button id="tGas" style="right:20px;bottom:200px;background:rgba(40,160,80,.45)">▲</button><button id="tBrake" style="right:100px;bottom:200px;background:rgba(200,40,40,.45)">▼</button>
+  <button id="tHand" style="right:180px;bottom:200px;font-size:13px">HB</button>
+  <button id="tMenu" style="right:16px;top:56px;font-size:13px;width:50px;height:50px">☰</button>
+  <button id="tCam" style="right:72px;top:56px;font-size:12px;width:50px;height:50px">CAM</button>
+  <button id="tAct" style="right:128px;top:56px;font-size:14px;width:50px;height:50px">E</button>
 </div>
 
 <script src="data/bishkek-data.js"></script>

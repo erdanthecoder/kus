@@ -23,7 +23,7 @@ def tiles(w,s,e,n,step):
             out.append((round(x,4),round(y,4),round(min(x+step,e),4),round(min(y+step,n),4))); x+=step
         y+=step
     return out
-T=tiles(74.54,42.83,74.66,42.91,0.02)+tiles(74.44,42.91,74.56,43.08,0.02)+tiles(74.48,42.83,74.54,42.91,0.02)+tiles(74.40,42.95,74.44,43.07,0.02)
+T=tiles(74.54,42.83,74.66,42.91,0.02)+tiles(74.44,42.91,74.56,43.08,0.02)+tiles(74.48,42.83,74.54,42.91,0.02)+tiles(74.40,42.95,74.44,43.07,0.02)+tiles(74.46,42.79,74.72,42.83,0.02)+tiles(74.66,42.83,74.72,42.93,0.02)+tiles(74.56,42.91,74.66,42.93,0.02)+tiles(74.44,42.83,74.48,42.91,0.02)
 print(len(T))
 with cf.ThreadPoolExecutor(3) as ex:
     for i,r in enumerate(ex.map(lambda t:get(*t),T)): print(i,len(r),flush=True)

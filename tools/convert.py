@@ -3,7 +3,7 @@ random.seed(7)
 nodes,ways,rels=pickle.load(open('merged.pkl','rb'))
 LAT0,LON0=42.87631,74.60353
 KX=math.cos(math.radians(LAT0))*111320.0; KZ=110574.0
-BOXES=[(74.54,42.83,74.66,42.91),(74.44,42.91,74.56,43.08),(74.48,42.83,74.54,42.91),(74.40,42.95,74.44,43.07)]
+BOXES=[(74.54,42.83,74.66,42.91),(74.44,42.91,74.56,43.08),(74.48,42.83,74.54,42.91),(74.40,42.95,74.44,43.07),(74.46,42.79,74.72,42.83),(74.66,42.83,74.72,42.93),(74.56,42.91,74.66,42.93),(74.44,42.83,74.48,42.91)]
 def inb(la,lo): return any(b[0]<=lo<=b[2] and b[1]<=la<=b[3] for b in BOXES)
 def P(n):
     la,lo,_=nodes[n]; return ((lo-LON0)*KX, -(la-LAT0)*KZ)
@@ -127,7 +127,12 @@ for t,nd in items:
         try: mn=float(t.get('min_height',0))
         except: pass
         nm=t.get('name:en') or t.get('name') or ''
-        buildings.append([k,round(h,1),round(mn,1),flat(xy)]+([nm] if nm else []))
+        col=t.get('building:colour') or ''
+        rcol=t.get('roof:colour') or ''
+        rs=t.get('roof:shape') or ''
+        f=flat(xy); d=[f[0],f[1]]
+        for i in range(2,len(f)): d.append(f[i]-f[i-2])
+        buildings.append([k,round(h,1),round(mn,1),d,nm,col,rcol,rs])
         continue
     key=t.get('leisure') or t.get('landuse') or t.get('natural') or t.get('amenity') or t.get('aeroway') or t.get('place') or (('pedestrian') if t.get('highway')=='pedestrian' and t.get('area')=='yes' else None)
     if key in AREA:
@@ -205,8 +210,38 @@ for wid,(nd,t) in ways.items():
 for nid,(la,lo,t) in nodes.items():
     if t and t.get('name') and inb(la,lo) and (t.get('amenity') in('marketplace','theatre','cinema','bus_station') or t.get('tourism') in ('museum','attraction','hotel') or t.get('shop') in('mall',) or t.get('historic') in ('monument','memorial')):
         x,z=P(nid); pois.append([t['name'],t.get('name:en') or '',q(x),q(z),t.get('amenity') or t.get('tourism') or t.get('shop') or t.get('historic')])
+routes=[]
+for rid,(mem,t) in rels.items():
+    if t.get('type')!='route' or t.get('route') not in ('bus','trolleybus','minibus','share_taxi'): continue
+    segs=[ways[r][0] for (ty,r,role) in mem if ty=='way' and role in ('','forward','backward') and r in ways]
+    if not segs: continue
+    chain=list(segs[0])
+    for sg in segs[1:]:
+        if sg[0]==chain[-1]: chain+=sg[1:]
+        elif sg[-1]==chain[-1]: chain+=sg[::-1][1:]
+        elif len(chain)==len(segs[0]) and sg[0]==chain[0]: chain=chain[::-1]+sg[1:]
+        elif len(chain)==len(segs[0]) and sg[-1]==chain[0]: chain=chain[::-1]+sg[::-1][1:]
+        else: break
+    rpts=[]
+    for n in chain:
+        if n in nodes and inb(nodes[n][0],nodes[n][1]):
+            x,z=P(n); rpts+=[q(x),q(z)]
+    if len(rpts)<40: continue
+    stops=[]
+    for (ty,r,role) in mem:
+        if ty=='node' and r in nodes and role.startswith(('stop','platform')):
+            x,z=P(r); stops+=[q(x),q(z)]
+    routes.append([t.get('ref',''),t.get('name',''),t.get('route'),rpts,stops])
+signs=[]
+SK=('cafe','restaurant','fast_food','pharmacy','bank','bar','pub','fuel','clinic','dentist','hotel')
+for nid,(la,lo,t) in nodes.items():
+    if not t or not t.get('name') or not inb(la,lo): continue
+    k=t.get('shop') or (t.get('amenity') if t.get('amenity') in SK else None) or (t.get('tourism') if t.get('tourism')=='hotel' else None)
+    if not k: continue
+    x,z=P(nid); signs.append([q(x),q(z),t['name'][:28],k])
+print('routes',len(routes),'signs',len(signs))
 print('pois',len(pois),'signals',len(signals),'trees',len(trees),'stands',len(stands))
-data=dict(origin=[LAT0,LON0],names=names,pts=pts,roads=roads,buildings=buildings,areas=areas,lines=lines,signals=signals,crossings=crossings,trees=trees,stands=stands,busstops=busstops,jet=jet,pois=pois)
+data=dict(origin=[LAT0,LON0],names=names,pts=pts,roads=roads,buildings=buildings,areas=areas,lines=lines,signals=signals,crossings=crossings,trees=trees,stands=stands,busstops=busstops,jet=jet,routes=routes,signs=signs,pois=pois)
 s=json.dumps(data,ensure_ascii=False,separators=(',',':'))
 open('bishkek.json','w').write(s)
 print(len(s)/1e6,'MB')

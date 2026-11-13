@@ -38,7 +38,7 @@ export class PlayerCar {
     const v = buildVehicle(typeId, {});
     this.spec = v.spec;
     const col = color ?? 0xf0f0f0;
-    this.paintMat = new THREE.MeshPhysicalMaterial({ color: col, metalness: 0.45, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.08, vertexColors: true });
+    this.paintMat = new THREE.MeshPhysicalMaterial({ color: col, metalness: 0.55, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06, vertexColors: true, envMapIntensity: 1.2 });
     const detailMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.25 });
     this.lightMat = new THREE.MeshStandardMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 0.2 });
     const p = new THREE.Mesh(v.paint, this.paintMat); p.castShadow = true;
@@ -109,118 +109,152 @@ export class PlayerCar {
     this._visual(dt, input);
   }
 
+  // Driving model: bicycle model with load transfer, combined-slip limit, and optional
+  // assists (ABS, traction control, stability control, counter-steer help).
   _step(dt, inp, world, traffic, onCrash) {
+    const A = this.assists || (this.assists = { abs: true, tcs: true, esc: true, steerAssist: true, sens: 1, manual: false });
     const fx = Math.sin(this.h), fz = Math.cos(this.h);
-    const rx = -fz, rz = fx;            // right vector (driver's right)
-    // NOTE: with forward (sin h, cos h), right = (-cos h, sin h)
     const Rx = -Math.cos(this.h), Rz = Math.sin(this.h);
     let u = this.vx * fx + this.vz * fz;
     let w = this.vx * Rx + this.vz * Rz;
-    void rx; void rz;
     const g = 9.81, m = this.mass;
-    // ---- steering
     const sp = Math.abs(u);
-    const maxSteer = 0.62 / (1 + sp / 16);
-    const target = -inp.steer * maxSteer; // input +1 = right; delta positive = left
-    const rate = 3.2;
-    this.steer += Math.max(-rate * dt, Math.min(rate * dt, target - this.steer));
+    const surf = this.surface ?? 1;            // 1 = asphalt, <1 = gravel / grass
+    // ---- steering: speed-sensitive lock & rate, smooth self-centering
+    const maxSteer = (0.6 / (1 + sp / 14)) * (0.75 + 0.5 * A.sens);
+    let target = -inp.steer * maxSteer;
+    // counter-steer assist: help catch slides (disabled while handbraking)
+    if (A.steerAssist && !inp.hand && sp > 6 && this.rearSlip) target += THREE.MathUtils.clamp(this.rearSlip * 0.55, -0.25, 0.25);
+    const rate = (inp.steer === 0 ? 5.5 : 4.2) / (1 + sp / 45);
+    this.steer += THREE.MathUtils.clamp(target - this.steer, -rate * dt, rate * dt);
     const d = this.steer;
-    // ---- longitudinal
+    // ---- engine / gearbox (always updated so the sound is right while coasting)
+    const torqueK = this._gearbox(inp);
+    // ---- longitudinal forces
     let Fx = 0;
     const thr = inp.throttle, brk = inp.brake;
     this.braking = false; this.reversing = false;
+    const stopped = sp < 0.6;
+    if (brk > 0 && stopped) this.stopHold = (this.stopHold || 0) + dt; else if (brk === 0) this.stopHold = 0;
+    const wantReverse = brk > 0 && (u < -0.3 || (stopped && this.stopHold > 0.2));
     if (thr > 0) {
-      if (u < -0.5) { Fx += 9000 * thr * m / 1500; this.braking = true; }
-      else {
-        const tractionMax = 0.95 * m * g * 0.62;
-        Fx += Math.min(tractionMax, this.power * this._torqueCurve() / Math.max(3.5, u)) * thr;
+      if (u < -0.5) { Fx += 1.0 * m * g * thr; this.braking = true; }
+      else if (!this.limiter) {
+        let drive = this.power * torqueK / Math.max(3.0, u) * thr;
+        const tractionMax = (A.tcs ? 0.92 : 1.15) * m * g * 0.6 * surf;
+        if (!A.tcs && drive > tractionMax && sp < 25) this.wheelspin = Math.min(1, (drive - tractionMax) / tractionMax); else this.wheelspin = 0;
+        Fx += Math.min(tractionMax, drive);
       }
-    }
+    } else this.wheelspin = 0;
     if (brk > 0) {
-      if (u > 0.6) { Fx -= 1.05 * m * g * brk; this.braking = true; }
-      else { // reverse
-        this.reversing = true;
-        if (u > -7) Fx -= m * 3.2 * brk;
+      if (wantReverse) { this.reversing = true; if (u > -8) Fx -= m * 3.4 * brk; }
+      else if (u > 0.3) {
+        const lock = A.abs ? 1.0 : 1.12;
+        Fx -= lock * m * g * brk * surf; this.braking = true;
+        if (!A.abs && brk > 0.9 && sp > 4) this.locked = true; else this.locked = false;
       }
-    }
-    if (inp.hand) { Fx -= Math.sign(u) * Math.min(Math.abs(u) * m * 4, 0.6 * m * g); }
-    Fx -= this.drag * u * Math.abs(u) + (0.014 * m * g * Math.sign(u) + 4 * u) * Math.min(1, Math.abs(u));
-    if (thr === 0 && brk === 0 && Math.abs(u) < 0.4) { u *= 0.9; }
-    // ---- lateral (bicycle model)
-    const a = this.a, b = this.b;
+    } else this.locked = false;
+    if (inp.hand) { Fx -= Math.sign(u) * Math.min(Math.abs(u) * m * 3, 0.55 * m * g); }
+    Fx -= this.drag * u * Math.abs(u) + (0.015 * m * g * Math.sign(u) + 4 * u) * Math.min(1, Math.abs(u)) * (surf < 1 ? 3.5 : 1);
+    if (thr === 0 && brk === 0 && sp < 0.4) u *= 0.85;
+    // ---- load transfer (CoG height ~0.55 m)
+    const a = this.a, b = this.b, L = a + b;
+    const dN = THREE.MathUtils.clamp(m * (this.accLong || 0) * 0.55 / L, -m * g * 0.3, m * g * 0.3);
+    const Nf = m * g * b / L - dN, Nr = m * g * a / L + dN;
+    const mu = 1.08 * surf;
     let Ff = 0, Fr = 0;
-    const mu = 1.05;
-    const Nf = m * g * b / (a + b), Nr = m * g * a / (a + b);
-    if (sp > 1.5) {
-      const af = Math.atan2(w - this.r * a, Math.abs(u)) + d * Math.sign(u);
-      const ar = Math.atan2(w + this.r * b, Math.abs(u));
-      const Cf = 9.5 * Nf, Cr = 10.5 * Nr;
-      const muR = inp.hand ? 0.42 : (thr > 0.9 && sp < 22 && this.power > 200000 ? 0.85 : 1);
-      Ff = THREE.MathUtils.clamp(-Cf * af, -mu * Nf, mu * Nf);
-      Fr = THREE.MathUtils.clamp(-Cr * ar, -mu * muR * Nr, mu * muR * Nr);
-      this.slip = Math.max(Math.abs(ar) * (inp.hand ? 2.5 : 1.4), Math.abs(af) * 0.6) * Math.min(1, sp / 8);
+    if (sp > 1.2) {
+      const af = Math.atan2(w - this.r * a, sp) + d * Math.sign(u);
+      const ar = Math.atan2(w + this.r * b, sp);
+      const Cf = 10 * Nf, Cr = 11 * Nr;
+      // combined slip: longitudinal use of rear grip reduces lateral capacity
+      const longUse = Math.min(0.9, Math.abs(Fx) / (mu * (Nf + Nr)) * (thr > 0 ? 1.2 : 0.6));
+      let muR = Math.sqrt(1 - longUse * longUse);
+      if (inp.hand) muR = 0.38;
+      if (this.wheelspin) muR *= 1 - 0.5 * this.wheelspin;
+      const muF = this.locked ? 0.25 : 1;
+      // smooth saturation (tanh) for progressive breakaway
+      const satF = mu * Nf * muF, satR = mu * Nr * muR;
+      Ff = -satF * Math.tanh(Cf * af / satF);
+      Fr = -satR * Math.tanh(Cr * ar / satR);
+      this.rearSlip = ar;
+      this.slip = Math.max(Math.abs(ar) * (inp.hand ? 2.4 : 1.6), Math.abs(af) * 0.7, this.wheelspin * 0.8, this.locked ? 0.6 : 0) * Math.min(1, sp / 8);
       const torque = -Ff * Math.cos(d) * a + Fr * b;
       this.r += torque / this.inertia * dt;
-      this.r *= 1 - 0.6 * dt;
+      this.r *= 1 - 0.8 * dt;
+      // electronic stability control: cap yaw rate to what the tyres can sustain
+      if (A.esc && !inp.hand) {
+        const rMax = mu * g / Math.max(sp, 4) * 1.12;
+        if (Math.abs(this.r) > rMax) this.r += (Math.sign(this.r) * rMax - this.r) * Math.min(1, dt * 8);
+        if (Math.abs(ar) > 0.12) w *= 1 - Math.min(0.5, dt * 2.5);
+      }
     } else {
-      // kinematic at parking speeds
-      this.r = u * Math.tan(d) / (a + b);
+      this.r = u * Math.tan(d) / L;
       w *= 0.5;
-      this.slip = 0;
+      this.slip = 0; this.rearSlip = 0;
     }
-    // world-space integration
     const Flat = Ff * Math.cos(d) + Fr;
-    let ax = (fx * Fx + Rx * Flat) / m, az = (fz * Fx + Rz * Flat) / m;
-    if (sp <= 1.5) {
-      // rebuild velocity from kinematic state
+    if (sp <= 1.2) {
       const nu = u + Fx / m * dt;
       this.vx = fx * nu + Rx * w; this.vz = fz * nu + Rz * w;
-      if (thr === 0 && brk === 0 && Math.abs(nu) < 0.15) { this.vx = this.vz = 0; this.r = 0; }
+      if (thr === 0 && !wantReverse && Math.abs(nu) < 0.2) { this.vx = this.vz = 0; this.r = 0; }
     } else {
-      this.vx += ax * dt; this.vz += az * dt;
+      // re-project ESC-damped lateral velocity
+      const nu = u + Fx / m * dt, nw = w + Flat / m * dt;
+      this.vx = fx * nu + Rx * nw; this.vz = fz * nu + Rz * nw;
     }
     this.h += this.r * dt;
     this.x += this.vx * dt; this.z += this.vz * dt;
-    this.accLong = Fx / m; this.accLat = Flat / m;
+    this.accLong = this.accLong === undefined ? 0 : this.accLong + (Fx / m - this.accLong) * Math.min(1, dt * 10);
+    this.accLat = Flat / m;
     this.speed = Math.hypot(this.vx, this.vz);
     this.u = this.vx * Math.sin(this.h) + this.vz * Math.cos(this.h);
     // ---- collisions with buildings (3 circles along the body)
-    const L = this.spec.L;
+    const CL = this.spec.L;
     const res = {};
-    for (const off of [L * 0.32, 0, -L * 0.32]) {
+    for (const off of [CL * 0.32, 0, -CL * 0.32]) {
       const cx = this.x + Math.sin(this.h) * off, cz = this.z + Math.cos(this.h) * off;
       if (world.collide(cx, cz, this.radius, res)) {
         this.x += res.x; this.z += res.z;
         const vn = this.vx * res.nx + this.vz * res.nz;
         if (vn < 0) {
-          this.vx -= res.nx * vn * 1.3; this.vz -= res.nz * vn * 1.3;
-          this.vx *= 0.92; this.vz *= 0.92;
+          this.vx -= res.nx * vn * 1.25; this.vz -= res.nz * vn * 1.25;
+          this.vx *= 0.94; this.vz *= 0.94;
           this.r += (off > 0 ? 1 : -1) * vn * 0.02 * Math.sign(res.nx * Math.cos(this.h) - res.nz * Math.sin(this.h));
           if (-vn > 2) { onCrash && onCrash(-vn, 'wall'); this.damage = Math.min(100, this.damage + (-vn) * 0.6); }
         }
       }
     }
-    // ---- collisions with traffic
     if (traffic) traffic.collidePlayer(this, onCrash);
+    if (this.remotes) this.remotes.collide(this, onCrash);
   }
 
-  _torqueCurve() {
-    // pseudo gearbox for feel + engine sound
+  shiftUp() { if (this.gear < 6) { this.gear = Math.max(1, this.gear) + 1; this.shiftT = 0.25; } }
+  shiftDown() { if (this.gear > 1) { this.gear--; this.shiftT = 0.2; } }
+
+  _gearbox(inp) {
     const u = Math.max(0, this.u || 0);
     const ratios = [0, 3.6, 2.2, 1.55, 1.18, 0.95, 0.78];
     const fin = 3.6, wr = this.spec.wr;
     if (!(this.gear >= 1)) this.gear = 1;
-    let rpm = u / wr * ratios[this.gear] * fin * 60 / (2 * Math.PI);
-    if (rpm > 6300 && this.gear < 6) this.gear++;
-    if (rpm < 2400 && this.gear > 1) this.gear--;
-    rpm = Math.max(900, u / wr * ratios[this.gear] * fin * 60 / (2 * Math.PI));
-    this.rpmTarget = Math.min(7000, rpm);
-    return 0.75 + 0.35 * Math.sin(Math.min(1, rpm / 6500) * Math.PI);
+    const rpmOf = (g) => u / wr * ratios[g] * fin * 60 / (2 * Math.PI);
+    let rpm = rpmOf(this.gear);
+    if (!(this.assists && this.assists.manual)) {
+      const up = inp.throttle > 0.5 ? 6300 : 3800;
+      if (rpm > up && this.gear < 6) { this.gear++; this.shiftT = 0.18; }
+      if (rpm < 2000 && this.gear > 1) this.gear--;
+      rpm = rpmOf(this.gear);
+    }
+    this.limiter = rpm > 7200;
+    this.rpmTarget = Math.min(7300, Math.max(900, rpm));
+    if (this.shiftT > 0) { this.shiftT -= 1 / 180; return 0.25; }
+    const x = Math.min(1, rpm / 6500);
+    return 0.72 + 0.38 * Math.sin(x * Math.PI);
   }
 
   _visual(dt, inp) {
     this.rpm += ((this.rpmTarget || 900) + (inp.throttle > 0 && this.speed < 1 ? 2200 * inp.throttle : 0) - this.rpm) * Math.min(1, dt * 6);
-    if (this.reversing) this.gear = -1; else if (this.gear < 1) this.gear = 1;
+    this.gearLabel = this.reversing ? 'R' : (this.speed < 0.3 && !this.throttleOn ? 'N' : String(this.gear));
     // body pitch/roll springs
     const tp = THREE.MathUtils.clamp(-(this.accLong || 0) * 0.006, -0.05, 0.05);
     const tr = THREE.MathUtils.clamp((this.accLat || 0) * 0.007, -0.06, 0.06);
@@ -240,7 +274,7 @@ export class PlayerCar {
     this.flareMat.opacity = this.night ? 0.55 : 0;
     this.spot.intensity = this.night ? 60 : 0;
     // skid marks + smoke
-    if (this.slip > 0.22 && this.speed > 6) {
+    if ((this.slip > 0.22 && this.speed > 6) || (this.wheelspin > 0.2 && this.speed > 1)) {
       this._addSkid();
       if (Math.random() < this.slip * 1.5) this._puff();
     } else this.lastSkid = null;
@@ -378,7 +412,7 @@ export class CameraRig {
     // subtle speed vibration
     if (sp > 30) this.cam.position.y += (Math.random() - 0.5) * 0.015 * (sp - 30) / 20;
     this.cam.lookAt(this.look);
-    const fov = (this.mode === 2 ? 72 : 62) + Math.min(18, sp * 0.22);
+    const fov = (this.mode === 2 ? (this.baseFov || 62) + 10 : (this.baseFov || 62)) + Math.min(16, sp * 0.2);
     this.cam.fov += (fov - this.cam.fov) * Math.min(1, dt * 3);
     this.cam.updateProjectionMatrix();
   }

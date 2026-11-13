@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { mulberry } from './data.js';
+import { U } from './materials.js';
 
 export class Environment {
   constructor(renderer, scene) {
@@ -12,6 +13,8 @@ export class Environment {
     this.sky = new Sky(); this.sky.scale.setScalar(150000);
     const u = this.sky.material.uniforms;
     u.turbidity.value = 2.6; u.rayleigh.value = 2.2; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.85;
+    // clamp the sun disk so HDR post-processing (half-float bloom) never overflows
+    for (const sk of [this.sky]) sk.material.fragmentShader = sk.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( min( retColor, vec3( 24.0 ) ), 1.0 );');
     this.bg.add(this.sky);
     this._stars();
     this._mountains();
@@ -117,6 +120,39 @@ export class Environment {
     plain.position.y = -6;
     this.plain = plain;
     this.bg.add(this.mountains, this.hills, plain);
+    this._clouds();
+  }
+
+  _clouds() {
+    this.cloudMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: U.uTime, sunDir: { value: new THREE.Vector3(0, 1, 0) }, day: { value: 1 }, fogCol: { value: new THREE.Color() }, cover: { value: 0.45 }, camPos: { value: new THREE.Vector3() } },
+      vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
+      fragmentShader: `uniform float uTime; uniform vec3 sunDir; uniform float day; uniform vec3 fogCol; uniform float cover; uniform vec3 camPos; varying vec3 vW;
+        float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+        float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+          return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+        float fbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<6;i++){ s+=a*noise(p); p*=2.03; a*=0.5; } return s; }
+        void main(){
+          vec2 p = vW.xz/9000.0 + vec2(uTime*0.004, uTime*0.0015);
+          float n = fbm(p);
+          float d = smoothstep(cover, cover+0.28, n);
+          if (d < 0.01) discard;
+          float shade = fbm(p + sunDir.xz*0.05);
+          float light = clamp(0.65 + (n - shade)*2.5, 0.35, 1.15);
+          vec3 sunC = mix(vec3(1.0,0.62,0.4), vec3(1.0), smoothstep(0.0,0.35,sunDir.y));
+          vec3 col = mix(vec3(0.55,0.6,0.7), sunC, light) * (0.08 + 0.95*day);
+          float dist = length(vW.xz - camPos.xz);
+          float fade = 1.0 - smoothstep(25000.0, 70000.0, dist);
+          col = mix(fogCol, col, 0.35 + 0.65*(1.0 - smoothstep(8000.0, 60000.0, dist)));
+          gl_FragColor = vec4(col, d*0.92*fade);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide,
+    });
+    this.cloudsMesh = new THREE.Mesh(new THREE.PlaneGeometry(160000, 160000, 1, 1).rotateX(-Math.PI / 2), this.cloudMat);
+    this.cloudsMesh.position.y = 2600;
+    this.bg.add(this.cloudsMesh);
   }
 
   setHour(h) { this.hour = ((h % 24) + 24) % 24; }
@@ -145,7 +181,7 @@ export class Environment {
     this.hemi.color.setRGB(0.55 + 0.2 * day, 0.62 + 0.22 * day, 0.85 + 0.1 * day).multiplyScalar(0.5 + 0.5 * day);
     if (this.night > 0.5) { this.hemi.color.setRGB(0.42, 0.5, 0.75); this.hemi.intensity = 0.6; }
     this.hemi.groundColor.setRGB(0.42 * (0.3 + day), 0.38 * (0.3 + day), 0.3 * (0.3 + day));
-    const fog = new THREE.Color().setRGB(0.6, 0.71, 0.84).lerp(new THREE.Color(0.92, 0.66, 0.45), golden * 0.55).multiplyScalar(0.08 + 0.92 * day);
+    const fog = new THREE.Color().setRGB(0.55, 0.66, 0.8).lerp(new THREE.Color(0.92, 0.66, 0.45), golden * 0.55).multiplyScalar(0.08 + 0.92 * day);
     if (this.night > 0.5) fog.setRGB(0.05, 0.065, 0.1);
     this.scene.fog.color.copy(fog);
     this.mtnMat.uniforms.fogCol.value.copy(fog);
@@ -153,6 +189,9 @@ export class Environment {
     this.mtnMat.uniforms.light.value = 0.12 + 0.95 * day;
     this.mtnMat.uniforms.camPos.value.copy(camera.position);
     this.starMat.opacity = this.night;
+    this.cloudMat.uniforms.sunDir.value.copy(this.sunDir); this.cloudMat.uniforms.day.value = day;
+    this.cloudMat.uniforms.fogCol.value.copy(fog); this.cloudMat.uniforms.camPos.value.copy(camera.position);
+    this.cloudsMesh.position.x = camera.position.x; this.cloudsMesh.position.z = camera.position.z;
     // shadow camera follows focus point
     const sd = this.sunDir.y > 0.05 ? this.sunDir : new THREE.Vector3(-0.4, 0.8, 0.3).normalize();
     this.sun.position.set(focus.x + sd.x * 400, sd.y * 400, focus.z + sd.z * 400);

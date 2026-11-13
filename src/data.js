@@ -183,7 +183,7 @@ export class MapData {
     const get = (x, z) => {
       const cx = Math.floor(x / C), cz = Math.floor(z / C), k = ck(cx, cz);
       let c = chunks.get(k);
-      if (!c) chunks.set(k, c = { key: k, cx, cz, buildings: [], edges: [], areas: [], lines: [], nodes: [], trees: [], crossings: [], busstops: [] });
+      if (!c) chunks.set(k, c = { key: k, cx, cz, buildings: [], edges: [], areas: [], lines: [], nodes: [], trees: [], crossings: [], busstops: [], signs: [] });
       return c;
     };
     this.globalAreas = [];
@@ -193,13 +193,15 @@ export class MapData {
       const n = f.length / 2;
       const pts = new Float32Array(f.length);
       let cx = 0, cz = 0, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-      for (let j = 0; j < f.length; j++) pts[j] = f[j] * 0.1;
+      // delta-decoded (decimetres)
+      let ax = 0, az = 0;
+      for (let j = 0; j < n; j++) { ax += f[j * 2]; az += f[j * 2 + 1]; pts[j * 2] = ax * 0.1; pts[j * 2 + 1] = az * 0.1; }
       for (let j = 0; j < n; j++) {
         const x = pts[j * 2], z = pts[j * 2 + 1];
         cx += x; cz += z;
         if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
       }
-      const B = { i, kind: b[0], h: b[1], minH: b[2], pts, cx: cx / n, cz: cz / n, x0, x1, z0, z1, name: b[4] || null };
+      const B = { i, kind: b[0], h: b[1], minH: b[2], pts, cx: cx / n, cz: cz / n, x0, x1, z0, z1, name: b[4] || null, colour: b[5] || null, roofColour: b[6] || null, roofShape: b[7] || null };
       get(B.cx, B.cz).buildings.push(B);
       return B;
     });
@@ -246,6 +248,9 @@ export class MapData {
     for (const t of D.trees) get(t[0] * 0.1, t[1] * 0.1).trees.push([t[0] * 0.1, t[1] * 0.1]);
     for (const t of D.crossings) get(t[0] * 0.1, t[1] * 0.1).crossings.push([t[0] * 0.1, t[1] * 0.1]);
     for (const t of D.busstops) get(t[0] * 0.1, t[1] * 0.1).busstops.push([t[0] * 0.1, t[1] * 0.1]);
+    for (const t of (D.signs || [])) get(t[0] * 0.1, t[1] * 0.1).signs.push({ x: t[0] * 0.1, z: t[1] * 0.1, name: t[2], kind: t[3] });
+    this.busStopList = D.busstops.map(t => [t[0] * 0.1, t[1] * 0.1]);
+    this.osmRoutes = (D.routes || []).map(r => ({ ref: r[0], name: r[1], type: r[2], pts: r[3].map(v => v * 0.1), stops: r[4].map(v => v * 0.1) }));
     this.runways = D.lines.filter(l => l[0] === 3).map(l => l[2].map(v => v * 0.1));
     this.taxiways = D.lines.filter(l => l[0] === 4).map(l => ({ w: l[1], pts: l[2].map(v => v * 0.1) }));
     this.stands = D.stands.map(s => s.map(v => v * 0.1));
