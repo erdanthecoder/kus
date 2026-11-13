@@ -60,11 +60,11 @@ export class Game {
   _load() {
     try {
       const s = JSON.parse(localStorage.getItem('bishkekDrive') || 'null');
-      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; }
+      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; this.custom = s.custom; this.upgrades = s.upgrades; }
     } catch (e) { /* storage unavailable */ }
   }
   save(car) {
-    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0 })); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades })); } catch (e) { /* ignore */ }
   }
 
   issueFine(kind, amount, detail, photo) {

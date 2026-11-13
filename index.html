@@ -82,6 +82,18 @@
   #busted small { display: block; font-size: .38em; letter-spacing: .4em; margin-top: 6px; }
   #busted.show { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
   .cinemode #hudRoot { opacity: 0; }
+  #nitroBox { position: absolute; right: 26px; bottom: 8px; width: 140px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #nitroBar { height: 100%; width: 100%; background: linear-gradient(90deg, #2a7fff, #8fd0ff); }
+  #nitroBox.boost { box-shadow: 0 0 12px #3fa0ff; }
+  #radioLbl { position: absolute; right: 186px; bottom: 90px; font-size: 12px; color: #cfe; text-shadow: 0 1px 4px #000; }
+  #drift { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%) scale(.8); font-weight: 800; font-size: 20px; letter-spacing: .12em; color: #fff; text-shadow: 0 0 12px rgba(255,120,40,.9), 0 2px 4px #000; opacity: 0; transition: .2s; }
+  #drift b { font-size: 30px; color: #ffd84a; } #drift i { font-style: normal; color: #ff6a3a; font-size: 24px; }
+  #drift.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #raceHud { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: none; gap: 14px; font-size: 15px; background: rgba(10,13,18,.7); border-radius: 999px; padding: 7px 18px; }
+  #raceHud.show { display: flex; } #raceHud span { font-variant-numeric: tabular-nums; font-weight: 700; color: #ffd84a; }
+  #countdown { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(.5); font-size: 120px; font-weight: 800; color: #fff; text-shadow: 0 6px 30px rgba(0,0,0,.7); opacity: 0; }
+  #countdown.show { animation: cd .9s ease-out; }
+  @keyframes cd { 0% { opacity: 0; transform: translate(-50%, -50%) scale(2); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.8); } }
   .flightmode #minimap, .flightmode #speedo, .flightmode #limit, .flightmode #mission { display: none; }
   .nomini #minimap { display: none; }
 
@@ -206,6 +218,7 @@
   <div id="street"></div>
   <div id="warn"></div>
   <div id="wanted"></div>
+  <div id="fps" style="position:absolute;right:14px;top:110px;font:600 11px monospace;color:#9f9;display:none"></div>
   <div id="bustBox"><div id="bust"></div></div>
   <div id="hint" class="pill"></div>
   <div id="toast" class="pill"></div>
@@ -213,6 +226,11 @@
   <canvas id="minimap"></canvas>
   <div id="limit">150</div>
   <canvas id="speedo"></canvas>
+  <div id="nitroBox"><div id="nitroBar"></div></div>
+  <div id="radioLbl"></div>
+  <div id="drift"></div>
+  <div id="raceHud"></div>
+  <div id="countdown"></div>
   <div id="fine"><div class="fh">ШТРАФ · FINE · SAFE CITY</div><img id="finePhoto" alt=""><div class="fb"><div id="fineKind"></div><div id="fineAmt"></div><div id="fineDetail"></div><div id="fineTime"></div></div></div>
   <div id="discover"><div style="font-size:10px;letter-spacing:.3em;color:#d8e0e8">LANDMARK</div><div id="discName"></div><div id="discLocal"></div><div id="discFact"></div><div id="discCount"></div></div>
   <div id="flightHud" class="hidden">
@@ -241,10 +259,14 @@
         <p class="muted" style="margin-top:0">Work to earn coins. Fines for speeding over 150 km/h, red lights and wrong-way driving are paid in coins too.</p>
         <div class="cards" id="jobCards"></div>
         <div id="jobNow" class="muted" style="margin-top:12px"></div>
+        <h4>Street races</h4>
+        <div class="cards" id="raceCards"></div>
+        <p class="muted" id="kalpakTxt"></p>
       </div>
       <div class="page" id="pGarage">
         <div class="cards" id="garage"></div>
         <div class="sws" id="colors"></div>
+        <div id="custom"></div>
         <div style="margin-top:14px"><button class="btn" id="repairBtn">🔧 Repair car</button> <span class="muted" id="dmgTxt"></span></div>
       </div>
       <div class="page" id="pOnline">
@@ -257,7 +279,7 @@
       <div class="page" id="pHelp">
         <div class="keys">
           <div><kbd>W</kbd><kbd>S</kbd> gas / brake · hold S to reverse</div><div><kbd>A</kbd><kbd>D</kbd> steer</div>
-          <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd><kbd>Ctrl</kbd> gear up / down (manual)</div>
+          <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd> nitro (drift to refill)</div><div><kbd>F</kbd> get out / in · steal cars</div><div><kbd>Q</kbd> radio</div><div><kbd>X</kbd><kbd>Z</kbd> gear up / down (manual)</div>
           <div><kbd>H</kbd> horn</div><div><kbd>C</kbd> camera · <kbd>RMB</kbd> look around</div>
           <div><kbd>J</kbd> jobs</div><div><kbd>M</kbd> map &amp; GPS</div>
           <div><kbd>E</kbd> interact (airport)</div><div><kbd>R</kbd> reset car</div>
@@ -313,6 +335,7 @@
   <button id="tLeft" style="left:16px;bottom:200px">◀</button><button id="tRight" style="left:98px;bottom:200px">▶</button>
   <button id="tGas" style="right:20px;bottom:200px;background:rgba(40,160,80,.45)">▲</button><button id="tBrake" style="right:100px;bottom:200px;background:rgba(200,40,40,.45)">▼</button>
   <button id="tHand" style="right:180px;bottom:200px;font-size:13px">HB</button>
+  <button id="tNitro" style="right:20px;bottom:280px;font-size:13px;background:rgba(40,110,255,.45)">N2O</button>
   <button id="tMenu" style="right:16px;top:56px;font-size:13px;width:50px;height:50px">☰</button>
   <button id="tCam" style="right:72px;top:56px;font-size:12px;width:50px;height:50px">CAM</button>
   <button id="tAct" style="right:128px;top:56px;font-size:14px;width:50px;height:50px">E</button>

@@ -28,16 +28,16 @@ export class World {
     this.root = new THREE.Group(); scene.add(this.root);
     this.mat = {
       building: buildingMaterial(T),
-      road: groundMaterial(T, T.asphalt, 7, 0xffffff, 0.92),
+      road: groundMaterial(T, T.asphalt, 7, 0xffffff, 0.92, 0.1),
       mark: markingMaterial(),
-      paving: Object.assign(groundMaterial(T, T.paving, 3.2, 0xb8b4ac, 0.9), { side: THREE.DoubleSide }),
+      paving: Object.assign(groundMaterial(T, T.paving, 3.2, 0xb8b4ac, 0.9, 0.75), { side: THREE.DoubleSide }),
       grass: groundMaterial(T, T.grass, 6, 0xffffff, 1),
       dirt: groundMaterial(T, T.dirt, 7, 0xffffff, 1),
       field: groundMaterial(T, T.field, 14, 0xffffff, 1),
-      asphalt: groundMaterial(T, T.asphalt, 7, 0xffffff, 0.92),
-      concrete: groundMaterial(T, T.concrete, 20, 0xc8c8c4, 0.85),
+      asphalt: groundMaterial(T, T.asphalt, 7, 0xffffff, 0.92, 0.5),
+      concrete: groundMaterial(T, T.concrete, 20, 0xc8c8c4, 0.85, 0.6),
       water: new THREE.MeshStandardMaterial({ color: 0x5a8090, roughness: 0.06, metalness: 0.4, vertexColors: true }),
-      tree: (() => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, map: treeAtlas(), alphaTest: 0.42, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;'); }; return m; })(),
+      tree: (() => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, map: treeAtlas(), alphaTest: 0.42, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.uniforms.uSnow = U.uSnow; sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow;').replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;').replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7,0.72,0.76), uSnow * 0.3);'); }; return m; })(),
       lamp: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.5 }),
       lampGlow: new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffc070, emissiveIntensity: 0 }),
       prop: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
@@ -96,7 +96,7 @@ export class World {
     const t0 = performance.now();
     for (const [d, c] of want) {
       this._buildChunk(c);
-      if (!forceAll && performance.now() - t0 > (this.radius > 2000 ? 14 : 8)) break;
+      if (!forceAll && performance.now() - t0 > (this.radius > 2000 ? 14 : (this.buildBudget || 8))) break;
     }
     // ---- far city: simplified building meshes out to farRadius (whole skyline visible)
     const FR = this.farRadius || 0;
@@ -376,6 +376,7 @@ export class World {
             const vx = bx - ax, vz = bz - az, l = Math.hypot(vx, vz); if (l < 3) continue;
             let t = ((s.x - ax) * vx + (s.z - az) * vz) / (l * l); t = Math.max(0.15, Math.min(0.85, t));
             const px = ax + vx * t, pz = az + vz * t, d = Math.hypot(s.x - px, s.z - pz);
+            if (d >= bd) continue;
             const nx = vz / l * out, nz = -vx / l * out;
             // prefer walls facing a street
             const r = this.map.nearestRoad(px + nx * 6, pz + nz * 6, 30);

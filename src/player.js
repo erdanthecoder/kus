@@ -62,8 +62,10 @@ export class PlayerCar {
       this.body.add(g);
     }
     // plates
-    const pt = plateTexture('01KG ' + String(100 + Math.floor(Math.random() * 899)) + ' ' + 'ABK'[Math.floor(Math.random() * 3)] + 'KG'[Math.floor(Math.random() * 2)] + 'B');
+    if (!this.plateText) this.plateText = '01KG ' + String(100 + Math.floor(Math.random() * 899)) + ' ' + 'ABK'[Math.floor(Math.random() * 3)] + 'KG'[Math.floor(Math.random() * 2)] + 'B';
+    const pt = plateTexture(this.plateText);
     const pm = new THREE.MeshBasicMaterial({ map: pt });
+    this.plateMat = pm;
     const pf = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.12), pm); pf.position.set(0, T.body[0][1] + 0.3, T.head.z + 0.075);
     const pr = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.12), pm); pr.position.set(0, T.body[0][1] + 0.42, T.tail.z - 0.075); pr.rotation.y = Math.PI;
     this.body.add(pf, pr);
@@ -72,14 +74,26 @@ export class PlayerCar {
     drv.position.set(0.38, T.cabin[0][1] + 0.38, (T.cabin[1][0] + T.cabin[2][0]) / 2 + 0.25);
     this.body.add(drv);
     // wheels
+    if (this.wheels) for (const w of this.wheels) this.group.remove(w.pivot);
     this.wheels = [];
     const wm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 });
+    this.wheelMat = wm;
     for (const [x, y, z] of v.wheelPos) {
       const pivot = new THREE.Group(); pivot.position.set(x, y, z);
       const w = new THREE.Mesh(v.wheel, wm); w.castShadow = true;
       pivot.add(w); this.group.add(pivot);
       this.wheels.push({ pivot, mesh: w, front: z > 0 });
     }
+    // nitro flames
+    this.flames = [];
+    const fm = new THREE.MeshBasicMaterial({ color: 0x66aaff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (const s of [-1, 1]) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.9, 10, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.45), fm);
+      f.position.set(s * T.W * 0.24, T.body[0][1] + 0.05, T.tail.z - 0.05); f.visible = false;
+      this.body.add(f); this.flames.push(f);
+    }
+    this.flameMat = fm;
+    this._applyCustom();
     // head lights (spot)
     if (!this.spot) {
       this.spot = new THREE.SpotLight(0xfff0d8, 0, 90, 0.55, 0.5, 1.2);
@@ -118,6 +132,38 @@ export class PlayerCar {
     this.dents++;
   }
   repair() { this.setType(this.type, this.color); }
+
+  // cosmetic upgrades bought in the garage
+  _applyCustom() {
+    const C = this.custom || (this.custom = {});
+    const T = this.spec;
+    if (this.neon) { this.group.remove(this.neon); this.neon = null; }
+    if (C.neon) {
+      const tex = this._neonTex || (this._neonTex = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 128;
+        const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 10, 64, 64, 64);
+        g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+        return new THREE.CanvasTexture(c);
+      })());
+      this.neon = new THREE.Mesh(new THREE.PlaneGeometry(T.W * 1.9, T.L * 1.35).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex, color: C.neon, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.neon.position.y = 0.14; this.neon.material.polygonOffset = true; this.neon.material.polygonOffsetFactor = -8; this.neon.material.polygonOffsetUnits = -30; this.neon.renderOrder = 2; this.group.add(this.neon);
+    }
+    if (this.spoiler) { this.body.remove(this.spoiler); this.spoiler = null; }
+    if (C.spoiler && !['van', 'bus', 'truck'].includes(this.type)) {
+      const g = new THREE.Group();
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(T.W * 0.95, 0.05, 0.35), this.paintMat);
+      wing.position.set(0, 0.28, 0); g.add(wing);
+      for (const s of [-1, 1]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 })); st.position.set(s * T.W * 0.3, 0.14, 0); g.add(st); }
+      const tailTop = T.body.reduce((m, p) => p[0] < T.L * -0.3 ? Math.max(m, p[1]) : m, 0.8);
+      g.position.set(0, tailTop, T.tail.z + 0.3); g.traverse(o => o.castShadow = true);
+      this.body.add(g); this.spoiler = g;
+    }
+    if (this.wheelMat) this.wheelMat.color.setHex(C.rims ?? 0xffffff);
+  }
+  setPlate(text) {
+    this.plateText = String(text).toUpperCase().slice(0, 12);
+    if (this.plateMat) { this.plateMat.map.dispose(); this.plateMat.map = plateTexture(this.plateText); this.plateMat.needsUpdate = true; }
+  }
 
   setColor(c) { this.paintMat.color.setHex(c); this.color = c; }
 
@@ -159,6 +205,10 @@ export class PlayerCar {
     const stopped = sp < 0.6;
     if (brk > 0 && stopped) this.stopHold = (this.stopHold || 0) + dt; else if (brk === 0) this.stopHold = 0;
     const wantReverse = brk > 0 && (u < -0.3 || (stopped && this.stopHold > 0.2));
+    if (this.nitro === undefined) this.nitro = 1;
+    this.boosting = !!(inp.nitro && this.nitro > 0.01 && thr > 0 && u > 1);
+    if (this.boosting) { Fx += m * 5.2; this.nitro = Math.max(0, this.nitro - dt * 0.2); }
+    else this.nitro = Math.min(1, this.nitro + dt * 0.02);
     if (thr > 0) {
       if (u < -0.5) { Fx += 1.0 * m * g * thr; this.braking = true; }
       else if (!this.limiter) {
@@ -276,6 +326,8 @@ export class PlayerCar {
   }
 
   _visual(dt, inp) {
+    if (this.flames) for (const f of this.flames) { f.visible = !!this.boosting; if (f.visible) { const k = 0.8 + Math.random() * 0.5; f.scale.set(1, 1, k); } }
+    if (this.flameMat) this.flameMat.color.setHex(Math.random() < 0.5 ? 0x66aaff : 0x99ccff);
     this.rpm += ((this.rpmTarget || 900) + (inp.throttle > 0 && this.speed < 1 ? 2200 * inp.throttle : 0) - this.rpm) * Math.min(1, dt * 6);
     this.gearLabel = this.reversing ? 'R' : (this.speed < 0.3 && !this.throttleOn ? 'N' : String(this.gear));
     // body pitch/roll springs
@@ -292,7 +344,7 @@ export class PlayerCar {
       w.mesh.rotation.x = this.spin;
       if (w.front) w.pivot.rotation.y = this.steer;
     }
-    this.brakeMat.opacity = this.braking ? 0.9 : (this.night ? 0.35 : 0);
+    this.brakeMat.opacity = this.braking ? 0.75 : (this.night ? 0.12 : 0);
     this.lightMat.emissiveIntensity = this.night ? 2.2 : (this.braking ? 1.2 : 0.3);
     this.flareMat.opacity = this.night ? 0.55 : 0;
     this.spot.intensity = this.night ? 60 : 0;

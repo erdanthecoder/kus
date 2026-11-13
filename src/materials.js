@@ -5,6 +5,7 @@ import { mulberry } from './data.js';
 export const U = {
   uNight: { value: 0 },      // 0 day .. 1 night (windows, street lamps)
   uTime: { value: 0 },
+  uSnow: { value: 0 },      // 0..1 snow cover
 };
 
 function canvas(w, h = w) {
@@ -116,13 +117,13 @@ export function makeTextures() {
 export function buildingMaterial(T) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0, map: T.facade });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uNight = U.uNight;
+    sh.uniforms.uNight = U.uNight; sh.uniforms.uSnow = U.uSnow;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aInfo; attribute vec2 aWin; varying vec2 vInfo; varying vec2 vWin;')
       .replace('#include <uv_vertex>', '#include <uv_vertex>\nvInfo = aInfo; vWin = aWin;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying vec2 vInfo; varying vec2 vWin; uniform float uNight;
+        varying vec2 vInfo; varying vec2 vWin; uniform float uNight; uniform float uSnow;
         float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
         float box2(vec2 f, vec4 r){ return step(r.x,f.x)*step(f.x,r.z)*step(r.y,f.y)*step(f.y,r.w); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -191,8 +192,9 @@ export function buildingMaterial(T) {
           if (st > 5.5 || (st > 2.5 && st < 3.5 && vWin.y < 1.2)) lit = win * uNight * 0.8;
           if (st > 2.5 && st < 3.5 && vWin.y >= 1.2) lit *= step(0.7, hh);
         } else {
-          // roofs: bitumen patches + gravel noise
+          // roofs: bitumen patches + gravel noise (+ snow in winter)
           diffuseColor.rgb *= 0.86 + 0.14*h21(floor(vWin*0.5)) + 0.05*h21(floor(vWin*4.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74,0.76,0.8), uSnow * 0.85);
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, glassRough, win);`)
@@ -205,14 +207,15 @@ export function buildingMaterial(T) {
 }
 
 // world-space textured ground material with macro variation
-export function groundMaterial(T, map, scale, tint = 0xffffff, rough = 0.95) {
+export function groundMaterial(T, map, scale, tint = 0xffffff, rough = 0.95, snowK = 0.9) {
   const m = new THREE.MeshStandardMaterial({ map, color: tint, roughness: rough, metalness: 0, vertexColors: true });
   m.onBeforeCompile = (sh) => {
+    sh.uniforms.uSnow = U.uSnow;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vWXZ;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWXZ = (modelMatrix*vec4(transformed,1.0)).xz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vWXZ;
+      .replace('#include <common>', `#include <common>\nvarying vec2 vWXZ; uniform float uSnow;
         float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
           float a=fract(sin(dot(i,vec2(127.1,311.7)))*43758.5), b=fract(sin(dot(i+vec2(1,0),vec2(127.1,311.7)))*43758.5),
           c=fract(sin(dot(i+vec2(0,1),vec2(127.1,311.7)))*43758.5), d=fract(sin(dot(i+vec2(1,1),vec2(127.1,311.7)))*43758.5);
@@ -221,7 +224,9 @@ export function groundMaterial(T, map, scale, tint = 0xffffff, rough = 0.95) {
         vec4 tA = texture2D(map, vWXZ / ${scale.toFixed(2)});
         vec4 tB = texture2D(map, vWXZ / ${(scale * 3.7).toFixed(2)} + 0.37);
         float mac = vn(vWXZ/60.0)*0.6 + vn(vWXZ/9.0)*0.4;
-        diffuseColor *= mix(tA, tB, 0.35) * (0.82 + 0.3*mac);`);
+        diffuseColor *= mix(tA, tB, 0.35) * (0.82 + 0.3*mac);
+        float snowM = uSnow * ${snowK.toFixed(2)} * smoothstep(0.25, 0.6, vn(vWXZ/3.0)*0.5 + 0.5*mac + 0.35);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7,0.72,0.76), snowM * 0.85);`);
   };
   return m;
 }

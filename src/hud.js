@@ -79,32 +79,33 @@ export class HUD {
   }
 
   // ------------------------------------------------------------ minimap
-  drawMini(car, traffic, game, airport, net) {
-    const c = this.mctx, W = this.mini.width, H = this.mini.height, d = this.dpr;
-    const s = 0.55 * d * (car.speed > 25 ? 0.75 : 1); // px per metre
-    c.save();
-    c.clearRect(0, 0, W, H);
-    c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.clip();
-    c.fillStyle = '#1d2329'; c.fillRect(0, 0, W, H);
-    c.translate(W / 2, H / 2 + H * 0.12);
-    c.rotate(car.h + Math.PI);
-    c.scale(s, s);
-    c.translate(-car.x, -car.z);
-    const R = (W / s) * 0.8;
-    const C = CHUNK, r = Math.ceil(R / C);
+  // static minimap layer (buildings + roads) cached north-up around an anchor; re-rendered
+  // only when the car moves far or the zoom changes -> the minimap costs almost nothing per frame
+  _miniBase(car, s, airport) {
+    const W = this.mini.width;
+    const Sz = Math.ceil(W * 2.2);
+    if (!this._mb || this._mb.width !== Sz) { this._mb = document.createElement('canvas'); this._mb.width = this._mb.height = Sz; this._mbS = 0; }
+    const R = Sz / 2 / s;
+    if (this._mbS === s && Math.hypot(car.x - this._mbX, car.z - this._mbZ) < R * 0.35) return;
+    this._mbS = s; this._mbX = car.x; this._mbZ = car.z;
+    const c = this._mb.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = '#1d2329'; c.fillRect(0, 0, Sz, Sz);
+    c.translate(Sz / 2, Sz / 2); c.scale(s, s); c.translate(-car.x, -car.z);
+    const C = CHUNK, r = Math.ceil(R / C) + 1;
     const pcx = Math.floor(car.x / C), pcz = Math.floor(car.z / C);
-    // buildings
     c.fillStyle = '#2f3741';
+    c.beginPath();
     for (let x = pcx - r; x <= pcx + r; x++) for (let z = pcz - r; z <= pcz + r; z++) {
       const ch = this.map.chunks.get(ck(x, z)); if (!ch) continue;
       for (const B of ch.buildings) {
         if (Math.abs(B.cx - car.x) > R || Math.abs(B.cz - car.z) > R) continue;
-        const p = B.pts; c.beginPath(); c.moveTo(p[0], p[1]);
+        const p = B.pts; c.moveTo(p[0], p[1]);
         for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
-        c.fill();
+        c.closePath();
       }
     }
-    // roads
+    c.fill();
     c.lineCap = 'round'; c.lineJoin = 'round';
     for (let pass = 6; pass >= 0; pass--) {
       c.strokeStyle = ROAD_COL[pass];
@@ -119,9 +120,25 @@ export class HUD {
         }
       }
     }
-    // airport runway
+    if (airport) { c.strokeStyle = '#8a9098'; c.lineWidth = airport.rwW; c.beginPath(); c.moveTo(airport.R0.x, airport.R0.y); c.lineTo(airport.R1.x, airport.R1.y); c.stroke(); }
+  }
+
+  drawMini(car, traffic, game, airport, net, extra) {
+    const c = this.mctx, W = this.mini.width, H = this.mini.height, d = this.dpr;
+    const s = 0.55 * d * (car.speed > 25 ? 0.75 : 1); // px per metre
+    this._miniBase(car, s, airport);
+    c.save();
+    c.clearRect(0, 0, W, H);
+    c.beginPath(); c.arc(W / 2, H / 2, W / 2 - 2, 0, 7); c.clip();
+    c.translate(W / 2, H / 2 + H * 0.12);
+    c.rotate(car.h + Math.PI);
+    const Sz = this._mb.width;
+    c.drawImage(this._mb, (this._mbX - car.x) * s - Sz / 2, (this._mbZ - car.z) * s - Sz / 2);
+    c.scale(s, s);
+    c.translate(-car.x, -car.z);
+    const R = (W / s) * 0.8;
+    if (extra) extra(c, s, R);
     if (airport) {
-      c.strokeStyle = '#8a9098'; c.lineWidth = airport.rwW; c.beginPath(); c.moveTo(airport.R0.x, airport.R0.y); c.lineTo(airport.R1.x, airport.R1.y); c.stroke();
       for (const p of airport.planes) { c.fillStyle = '#ffffff'; c.beginPath(); c.arc(p.x, p.z, 14, 0, 7); c.fill(); }
     }
     // route

@@ -17,6 +17,17 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Newest
+
+- **Nitro** (Shift) with blue exhaust flames; **drift scoring** with combo multipliers that pay coins and refill nitro.
+- **Walk around** (F): get out of the car, run (Shift), jump (Space), get back in, or **steal any car** (the driver runs off and the police come after you).
+- **Street races**: 4 checkpoint races on real streets (Chuy Avenue Sprint, Ala-Too Circuit, South Side Run, Manas Airport Rush) against gold and silver rival cars, with a 3-2-1 countdown, medals, prizes and best times.
+- **40 golden kalpaks** hidden all over Bishkek (+250 coins each, bonus for all).
+- **Car customization**: neon underglow, rims, rear spoiler, custom number plate.
+- **Weather**: rain (wet, reflective roads, less grip) and Bishkek winter snow (white streets, frosty trees, slippery), or changing weather.
+- **Car radio** (Q): 4 stations of generated music (pop, synthwave, Kyrgyz komuz folk, lo-fi).
+- **Less lag**: automatic resolution scaling keeps the FPS smooth, the minimap is cached, shadows are cheaper, and there's an optional FPS counter.
+
 ## Latest
 
 - **Police chases:** crash into cars, wreck them or drive too fast and the patrol police (*Патрульная милиция*) chase you with sirens and light bars, following the real roads. Lose them for an escape bonus. If they catch you, an arrest cutscene plays and you pay a fine.
