@@ -185,7 +185,26 @@ export class HUD {
   }
 
   drawBigMap(car, game, airport, net) {
-    const c = this.bctx, W = this.big.width, H = this.big.height, v = this.mapView, s = v.s;
+    // static layer (areas, every building, roads, labels) is cached until the view changes
+    const W0 = this.big.width, H0 = this.big.height, v0 = this.mapView;
+    const key = [v0.x | 0, v0.z | 0, v0.s.toFixed(4), W0, H0, game.route ? game.route.length + ':' + (game.route[0] | 0) : 0, this.searchMark ? this.searchMark.x : 0, game.visited.size].join('|');
+    if (!this._base || this._base.width !== W0 || this._base.height !== H0) { this._base = document.createElement('canvas'); this._base.width = W0; this._base.height = H0; this._mapKey = null; }
+    if (key !== this._mapKey) { this._mapKey = key; this._drawMapBase(this._base.getContext('2d'), car, game, airport); }
+    const c = this.bctx;
+    c.drawImage(this._base, 0, 0);
+    const toS = (x, z) => [(x - v0.x) * v0.s + W0 / 2, (z - v0.z) * v0.s + H0 / 2];
+    c.font = `600 ${11 * this.dpr}px Inter, Arial`; c.textAlign = 'center';
+    if (net) for (const r of net.players.values()) { const [sx, sy] = toS(r.x, r.z); c.fillStyle = '#3ddc84'; c.beginPath(); c.arc(sx, sy, 6 * this.dpr, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillText(r.name, sx, sy - 10 * this.dpr); }
+    const [px, py] = toS(car.x, car.z);
+    c.save(); c.translate(px, py); c.rotate(Math.PI - car.h);
+    c.fillStyle = '#3fc8ff'; c.strokeStyle = '#fff'; c.lineWidth = 2 * this.dpr;
+    const k = this.dpr;
+    c.beginPath(); c.moveTo(0, -11 * k); c.lineTo(8 * k, 9 * k); c.lineTo(0, 4 * k); c.lineTo(-8 * k, 9 * k); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+  }
+
+  _drawMapBase(c, car, game, airport, net) {
+    const W = this.big.width, H = this.big.height, v = this.mapView, s = v.s;
     c.fillStyle = '#161b20'; c.fillRect(0, 0, W, H);
     c.save();
     c.translate(W / 2, H / 2); c.scale(s, s); c.translate(-v.x, -v.z);
@@ -200,8 +219,8 @@ export class HUD {
       for (let i = 2; i < p.length; i += 2) c.lineTo(p[i] * 0.1, p[i + 1] * 0.1);
       c.fill();
     }
-    if (s > 0.25) {
-      c.fillStyle = '#2c333b';
+    if (s > 0.035) {
+      c.fillStyle = s > 0.25 ? '#343c46' : '#2a3139';
       for (const B of this.map.buildings) {
         if (B.cx < x0 || B.cx > x1 || B.cz < z0 || B.cz > z1) continue;
         const p = B.pts; c.beginPath(); c.moveTo(p[0], p[1]);
@@ -259,14 +278,8 @@ export class HUD {
         c.fillText(label, sx, sy);
       }
     }
-    if (net) for (const r of net.players.values()) { const [sx, sy] = toS(r.x, r.z); c.fillStyle = '#3ddc84'; c.beginPath(); c.arc(sx, sy, 6 * this.dpr, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillText(r.name, sx, sy - 10 * this.dpr); }
+    if (this.searchMark) { const [sx, sy] = toS(this.searchMark.x, this.searchMark.z); const k = this.dpr; c.fillStyle = '#ff3a6a'; c.strokeStyle = '#fff'; c.lineWidth = 2 * k; c.beginPath(); c.moveTo(sx, sy); c.arc(sx, sy - 18 * k, 9 * k, Math.PI * 0.8, Math.PI * 2.2); c.closePath(); c.fill(); c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(sx, sy - 18 * k, 3.5 * k, 0, 7); c.fill(); }
     if (game.routeTarget) { const [sx, sy] = toS(game.routeTarget.x, game.routeTarget.z); c.fillStyle = '#ff3a6a'; c.beginPath(); c.arc(sx, sy, 7 * this.dpr, 0, 7); c.fill(); }
-    const [px, py] = toS(car.x, car.z);
-    c.save(); c.translate(px, py); c.rotate(Math.PI - car.h);
-    c.fillStyle = '#3fc8ff'; c.strokeStyle = '#fff'; c.lineWidth = 2 * this.dpr;
-    const k = this.dpr;
-    c.beginPath(); c.moveTo(0, -11 * k); c.lineTo(8 * k, 9 * k); c.lineTo(0, 4 * k); c.lineTo(-8 * k, 9 * k); c.closePath(); c.fill(); c.stroke();
-    c.restore();
     c.fillStyle = 'rgba(255,255,255,0.5)'; c.textAlign = 'right'; c.font = `${10 * this.dpr}px Inter, Arial`;
     c.fillText('Map data © OpenStreetMap contributors', W - 10 * this.dpr, H - 10 * this.dpr);
   }

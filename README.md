@@ -17,6 +17,14 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Latest
+
+- **Police chases:** crash into cars, wreck them or drive too fast and the patrol police (*Патрульная милиция*) chase you with sirens and light bars, following the real roads. Lose them for an escape bonus. If they catch you, an arrest cutscene plays and you pay a fine.
+- **Crash damage:** your car dents, smokes and loses power, and other cars crumple, wreck and block traffic (debris, sparks, hazard lights). Repair in the Garage.
+- **Map search (M):** find any street, shop, café, pharmacy, landmark or named building in Bishkek (Latin or Cyrillic), then get a route there or teleport.
+- **Whole skyline:** every building in the city stays visible far into the distance, with lit windows at night. Set the distance with *City skyline distance* in Settings.
+- **How-to-play card** on first start.
+
 ## New in BskDrive
 
 - **Online multiplayer:** every player in Bishkek sees the others live, with name tags, chat (Enter), an online leaderboard (Tab) and car-to-car collisions. Runs on Supabase Realtime.

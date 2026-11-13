@@ -67,6 +67,21 @@
   #chat div { text-shadow: 0 1px 4px #000; transition: opacity 1s; }
   #chat b { color: var(--acc); }
   #chatInput { position: fixed; left: 14px; bottom: 190px; width: min(360px, 70vw); z-index: 30; pointer-events: auto; background: rgba(10,14,20,.85); color: #fff; border: 1px solid var(--acc); border-radius: 10px; padding: 9px 12px; font-size: 14px; outline: none; }
+  #wanted { position: absolute; top: 50px; right: 14px; font-size: 22px; color: #ffd84a; letter-spacing: 2px; text-shadow: 0 0 8px rgba(255,80,0,.8), 0 2px 4px #000; opacity: 0; transition: .3s; }
+  #wanted span { color: rgba(255,255,255,.25); text-shadow: none; }
+  #wanted.show { opacity: 1; animation: wflash 0.5s infinite alternate; }
+  @keyframes wflash { to { text-shadow: 0 0 14px rgba(40,90,255,.9), 0 2px 4px #000; } }
+  #bustBox { position: absolute; top: 84px; right: 14px; width: 120px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; opacity: 0; transition: .2s; }
+  #bustBox.show { opacity: 1; } #bust { height: 100%; width: 0; background: #ff3a3a; }
+  #cine { position: fixed; inset: 0; pointer-events: none; z-index: 35; }
+  #cine::before, #cine::after { content: ''; position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height .6s; }
+  #cine::before { top: 0; } #cine::after { bottom: 0; }
+  #cine.on::before, #cine.on::after { height: 11vh; }
+  #cineSub { position: absolute; bottom: 14vh; left: 50%; transform: translateX(-50%); font-size: 18px; font-weight: 600; text-align: center; text-shadow: 0 2px 6px #000; width: 90vw; }
+  #busted { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%) rotate(-8deg) scale(2.5); font-size: clamp(48px, 10vw, 110px); font-weight: 800; color: #ff2a2a; border: 8px solid #ff2a2a; padding: 6px 28px; border-radius: 14px; opacity: 0; transition: .35s cubic-bezier(.2,1.6,.4,1); text-shadow: 0 4px 20px rgba(0,0,0,.6); letter-spacing: .05em; text-align: center; line-height: 1; }
+  #busted small { display: block; font-size: .38em; letter-spacing: .4em; margin-top: 6px; }
+  #busted.show { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+  .cinemode #hudRoot { opacity: 0; }
   .flightmode #minimap, .flightmode #speedo, .flightmode #limit, .flightmode #mission { display: none; }
   .nomini #minimap { display: none; }
 
@@ -130,9 +145,25 @@
   #mapPanel { position: fixed; inset: 2vh 2vw; z-index: 45; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
   #bigmap { width: 100%; height: 100%; display: block; cursor: crosshair; }
   #mapClose { position: absolute; right: 12px; top: 12px; }
-  #mapHelp { position: absolute; left: 12px; top: 12px; font-size: 12px; color: #c5d0da; }
+  #mapHelp { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: #c5d0da; }
+  #searchBox { position: absolute; left: 12px; top: 12px; width: min(420px, 70vw); }
+  #searchInput { width: 100%; background: rgba(12,16,22,.92); color: #fff; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 12px 14px; font-size: 15px; outline: none; }
+  #searchInput:focus { border-color: var(--acc); }
+  #searchRes { margin-top: 6px; background: rgba(12,16,22,.95); border-radius: 12px; overflow: hidden; max-height: 60vh; overflow-y: auto; }
+  #searchRes button { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); color: #fff; padding: 9px 12px; font-size: 14px; }
+  #searchRes button:hover, #searchRes button.on { background: rgba(63,200,255,.15); }
+  #searchRes small { display: block; color: #8fa3b6; font-size: 11px; }
+  #searchRes .ic { font-size: 18px; width: 24px; text-align: center; }
+  #placeCard { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: rgba(12,16,22,.95); border: 1px solid rgba(255,255,255,.15); border-radius: 14px; padding: 12px 16px; text-align: center; min-width: 260px; }
+  #placeCard b { display: block; font-size: 16px; } #placeCard small { display: block; color: #8fa3b6; margin: 2px 0 10px; }
   #fids { width: 100%; border-collapse: collapse; font: 600 13px 'Courier New', monospace; background: #050608; color: #ffcc33; border-radius: 8px; overflow: hidden; }
   #fids th { text-align: left; color: #8a9aaa; font-size: 11px; padding: 6px 8px; } #fids td { padding: 5px 8px; border-top: 1px solid #111; } #fids td.red { color: #ff5050; }
+  #intro { position: fixed; inset: 0; z-index: 48; background: rgba(5,8,12,.7); backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #intro h2 { margin: 0 0 18px; font-size: 28px; }
+  #intro .ig { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; width: min(900px, 94vw); margin-bottom: 22px; }
+  #intro .ig div { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  #intro .ig span { font-size: 34px; } #intro .ig b { display: block; font-size: 17px; margin: 6px 0 4px; } #intro .ig small { color: #a9bccd; font-size: 13px; line-height: 1.45; }
+  #intro .bigBtn { padding: 14px 48px; }
   #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .7s; z-index: 60; }
   #fade.on { opacity: 1; }
   #flightHud { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; font-size: 13px; }
@@ -174,6 +205,8 @@
   <div id="clock" class="pill">08:30</div>
   <div id="street"></div>
   <div id="warn"></div>
+  <div id="wanted"></div>
+  <div id="bustBox"><div id="bust"></div></div>
   <div id="hint" class="pill"></div>
   <div id="toast" class="pill"></div>
   <div id="chat"></div>
@@ -189,6 +222,7 @@
 </div>
 <input id="chatInput" class="hidden" maxlength="120" placeholder="Say something… (Enter to send, Esc to cancel)">
 <div id="flash"></div>
+<div id="cine"><div id="cineSub"></div><div id="busted">ПОЙМАН<small>BUSTED</small></div></div>
 
 <div id="pause" class="overlay hidden">
   <div class="panel">
@@ -211,6 +245,7 @@
       <div class="page" id="pGarage">
         <div class="cards" id="garage"></div>
         <div class="sws" id="colors"></div>
+        <div style="margin-top:14px"><button class="btn" id="repairBtn">🔧 Repair car</button> <span class="muted" id="dmgTxt"></span></div>
       </div>
       <div class="page" id="pOnline">
         <div class="muted" id="netStatus"></div>
@@ -237,7 +272,12 @@
 
 <div id="mapPanel" class="hidden">
   <canvas id="bigmap"></canvas>
-  <div id="mapHelp" class="pill">Drag · wheel zoom · <b>click</b> = GPS route · <b>Shift+click</b> = teleport</div>
+  <div id="searchBox">
+    <input id="searchInput" type="text" placeholder="🔍 Search Bishkek: places, streets, shops, cafés…" autocomplete="off">
+    <div id="searchRes"></div>
+  </div>
+  <div id="placeCard" class="hidden"><b id="pcName"></b><small id="pcSub"></small><div><button class="btn pri" id="pcRoute">🧭 Route</button> <button class="btn" id="pcGo">⚡ Go there</button></div></div>
+  <div id="mapHelp" class="pill">Drag · wheel zoom · click = route · Shift+click = teleport</div>
   <button class="btn" id="mapClose">Close [M]</button>
 </div>
 
@@ -258,6 +298,16 @@
 
 <div id="boarding"><div class="l"><h4>BOARDING PASS</h4><div class="big">FRU → FRU</div><div>Flight AT 1991 · Scenic flight over Bishkek</div><div style="margin-top:8px;font-size:12px;color:#666">Gate 3 · Seat 12A (window)</div></div><div class="r"><div style="font-size:11px">SEAT</div><div class="big" style="color:#fff">12A</div></div></div>
 <div id="fade"></div>
+<div id="intro" class="hidden">
+  <h2>How to play</h2>
+  <div class="ig">
+    <div><span>🪙</span><b>Earn coins</b><small>Press <kbd>J</kbd> – work as a taxi, bus or marshrutka driver, or courier</small></div>
+    <div><span>🗺</span><b>Explore Bishkek</b><small>Press <kbd>M</kbd> and search any street, shop, café or landmark</small></div>
+    <div><span>🚨</span><b>Police chases</b><small>Crash into cars or speed and the police come. Lose them or get <b style="color:#ff4a4a">BUSTED</b></small></div>
+    <div><span>🚗</span><b>Buy cars</b><small>Spend coins in the Garage (<kbd>Esc</kbd>). Repair damage there too</small></div>
+  </div>
+  <button class="bigBtn" id="introGo">LET'S GO</button>
+</div>
 
 <div id="touch" class="hidden">
   <button id="tLeft" style="left:16px;bottom:200px">◀</button><button id="tRight" style="left:98px;bottom:200px">▶</button>

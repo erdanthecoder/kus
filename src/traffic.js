@@ -294,6 +294,7 @@ export class Traffic {
         if (cos < 0.8) v0 = Math.min(v0, 4 + 8 * Math.max(0, cos + 0.2));
       }
       if (c.bump > 0) { c.bump -= dt; v0 = 0; }
+      if (c.wrecked) { c.v = 0; c.brake = false; continue; }
       const amax = 1.6 * c.aggr, bcomf = 2.5, s0 = 2.2, T = 1.3 / c.aggr;
       const dv = c.v - lv;
       const sStar = s0 + Math.max(0, c.v * T + c.v * dv / (2 * Math.sqrt(amax * bcomf)));
@@ -345,11 +346,15 @@ export class Traffic {
     for (const c of this.cars) {
       const m = this.models[c.type];
       const i = m._i++;
-      Q.setFromAxisAngle(Y, c.h);
+      if (c.wrecked) { this._E = this._E || new THREE.Euler(); this._E.set(0, c.h + c.wreckYaw, c.wreckRoll, 'YXZ'); Q.setFromEuler(this._E); }
+      else Q.setFromAxisAngle(Y, c.h);
       M.compose(V.set(c.x, 0.03, c.z), Q, S);
       m.p.setMatrixAt(i, M); m.d.setMatrixAt(i, M); m.l.setMatrixAt(i, M);
       m.p.setColorAt(i, C.setHex(c.color));
-      const b = c.brake ? Math.max(lb, 1.4) : lb;
+      if (c.wrecked) C.multiplyScalar(0.45); else if (c.hp < 100) C.multiplyScalar(0.75 + 0.25 * c.hp / 100);
+      if (c.wrecked || c.hp < 100) m.p.setColorAt(i, C);
+      const hz = c.wrecked && (performance.now() % 1000) < 500;
+      const b = c.wrecked ? (hz ? 1.6 : 0.1) : c.brake ? Math.max(lb, 1.4) : lb;
       m.l.setColorAt(i, C.setRGB(b, b, b));
     }
     for (const t in this.models) {
@@ -383,8 +388,14 @@ export class Traffic {
             const vn = relx * nx + relz * nz;
             if (vn < 0) {
               pl.vx -= nx * vn * 1.25; pl.vz -= nz * vn * 1.25;
-              if (-vn > 1.5) { onCrash && onCrash(-vn, 'car', c); pl.damage = Math.min(100, pl.damage + (-vn) * 0.5); }
-              c.bump = 2.5 + Math.random() * 2; c.v *= 0.3;
+              if (-vn > 1.5) {
+                c.hp = (c.hp ?? 100) - (-vn) * 9;
+                const wreck = c.hp <= 0 && !c.wrecked;
+                if (wreck) { c.wrecked = true; c.wreckRoll = (Math.random() - 0.5) * 0.12; c.wreckYaw = (Math.random() - 0.5) * 0.6; }
+                onCrash && onCrash(-vn, 'car', c, cx + nx * cr, cz + nz * cr, -nx, -nz, wreck);
+                pl.damage = Math.min(100, pl.damage + (-vn) * 0.6);
+              }
+              c.bump = c.wrecked ? 1e9 : 2.5 + Math.random() * 2; c.v *= 0.3;
               c.wait = 4;
             }
           }

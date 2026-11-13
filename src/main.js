@@ -15,6 +15,9 @@ import { Game, PLACES, fmt } from './game.js';
 import { Jobs, JOBS } from './jobs.js';
 import { Net } from './net.js';
 import { PostFX } from './postfx.js';
+import { FX } from './fx.js';
+import { Police } from './police.js';
+import { PlaceSearch } from './search.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -28,10 +31,10 @@ const CARS = [
   { id: 'coupe', name: 'Sport Coupe', desc: '420 hp. Mind the 150 km/h cameras!', price: 60000 },
 ];
 const PRESETS = {
-  low: { scale: 0.7, view: 900, shadows: false, bloom: false, msaa: false },
-  medium: { scale: 1, view: 1250, shadows: true, bloom: true, msaa: false },
-  high: { scale: 1.25, view: 1600, shadows: true, bloom: true, msaa: true },
-  ultra: { scale: 1.6, view: 2200, shadows: true, bloom: true, msaa: true },
+  low: { scale: 0.7, view: 900, far: 2500, shadows: false, bloom: false, msaa: false },
+  medium: { scale: 1, view: 1250, far: 4500, shadows: true, bloom: true, msaa: false },
+  high: { scale: 1.25, view: 1600, far: 6500, shadows: true, bloom: true, msaa: true },
+  ultra: { scale: 1.6, view: 2200, far: 9000, shadows: true, bloom: true, msaa: true },
 };
 const DEFAULTS = {
   preset: 'medium', traffic: 1, peds: 1, sens: 1, abs: true, tcs: true, esc: true, steerAssist: true, manual: false,
@@ -113,6 +116,10 @@ async function boot() {
   peds.addZone({ name: 'Manas Airport', x: airport.dropoff.x + airport.n.x * 18, z: airport.dropoff.y + airport.n.y * -18, r: 45, n: 40, bags: true });
   const jobs = new Jobs(map, game, hud, audio, peds);
   jobs.completed = game.jobsDone || 0;
+  const search = new PlaceSearch(map);
+  const fx = new FX(scene);
+  const police = new Police(scene, map, world, audio, hud, fx);
+  police.onEscape = (stars) => { const b = 100 * stars; game.money += b; audio.cash(); hud.toast(`+${b} coins escape bonus`, 2); };
   const net = new Net(scene);
   car.remotes = net;
   const rig = new CameraRig(camera);
@@ -132,16 +139,19 @@ async function boot() {
     car.assists = { abs: settings.abs, tcs: settings.tcs, esc: settings.esc, steerAssist: settings.steerAssist, sens: settings.sens, manual: settings.manual };
     audio.setVolume(settings.vol);
     world.radius = settings.view;
+    world.farRadius = settings.far || 0;
+    camera.far = Math.max(4200, (settings.far || 0) + 800); camera.updateProjectionMatrix();
     camera.fov = settings.fov;
     $('hudRoot').classList.toggle('nomini', !settings.minimap);
     saveSettings(settings);
   }
   applySettings();
-  window.__bd = { teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
+  window.__bd = { fx, police, teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
 
   // ---------------------------------------------------------------- vehicles
   function setCar(type, color, isHome) {
     car.setType(type, color ?? car.color);
+    if (S.engineSmoke) { fx.removeEmitter(S.engineSmoke); S.engineSmoke = null; }
     car.assists && (car.assists = { ...car.assists });
     if (isHome) { game.homeCar = type; game.homeColor = color ?? car.color; }
     rig.snap(car);
@@ -171,6 +181,7 @@ async function boot() {
       if (!$('airportMenu').classList.contains('hidden')) return $('airportMenu').classList.add('hidden');
       if (S.mode === 'flight') return endFlight(true);
       if (S.mode === 'spot') return endSpot();
+      if (S.mode === 'cutscene') return;
       return togglePause();
     }
     if (S.paused) return;
@@ -213,10 +224,43 @@ async function boot() {
     const off = map.laneOffset(r.e, 0);
     car.place(r.x - r.dz * off, r.z + r.dx * off, Math.atan2(r.dx, r.dz));
     traffic.clear(); for (const t in traffic.models) traffic.models[t].n = 0;
+    police.clear();
+    for (const e of [...fx.emitters]) if (e.ai) fx.removeEmitter(e);
     peds.list = peds.list.filter(p => p.fixed); for (const z2 of peds.extraZones) z2.count = 0;
     rig.snap(car);
     for (let i = 0; i < 6; i++) world.update({ x: car.x, z: car.z }, 0, true);
   }
+
+  // ---------------------------------------------------------------- crashes, damage, police
+  function onCrash(v, what, other, px, pz, nx, nz, wreck) {
+    if (settings.shake) rig.shake = Math.min(0.7, v * 0.05);
+    audio.crash(v);
+    if (px !== undefined && v > 3) {
+      fx.crash(px, 0.6, pz, nx ?? 0, nz ?? 0, v, what === 'car' && other ? other.color : car.color);
+      if (v > 4) car.dent(px, pz, Math.min(0.32, v * 0.022));
+    }
+    if (what === 'car' && other) {
+      if (wreck) {
+        other.emitter = fx.emitter(other, [0, 1.0, other.spec.L * 0.32], true); other.emitter.ai = true;
+        hud.toast('💥 Car wrecked!', 1.5);
+        police.crime(1.6, 'You wrecked a car');
+      } else if (v > 7) police.crime(1.0, 'Hit-and-run');
+      else if (v > 4) police.crime(0.4, 'Reckless driving');
+    }
+    if (what === 'player' && v > 6) police.crime(0.6, 'Rammed another driver');
+    updateEngineSmoke();
+  }
+  function updateEngineSmoke() {
+    if (car.damage > 55 && !S.engineSmoke) S.engineSmoke = fx.emitter(car, [0, 1.05, car.spec.L * 0.36], false);
+    if (S.engineSmoke) S.engineSmoke.dark = car.damage >= 90;
+    if (car.damage <= 55 && S.engineSmoke) { fx.removeEmitter(S.engineSmoke); S.engineSmoke = null; }
+  }
+  police.onRam = () => updateEngineSmoke();
+  game.onFine = (f) => {
+    if (f.kind === 'Speeding' && f.amount >= 500) police.crime(1, 'Extreme speeding');
+    else if (f.kind === 'Runway incursion') police.crime(2, 'Runway incursion');
+    else if (f.kind === 'Red light') police.crime(0.35, 'Ran a red light');
+  };
 
   // ---------------------------------------------------------------- chat
   const chatLines = [];
@@ -261,9 +305,36 @@ async function boot() {
   function toggleMap(force) {
     S.mapOpen = force !== undefined ? force : !S.mapOpen;
     $('mapPanel').classList.toggle('hidden', !S.mapOpen);
-    if (S.mapOpen) { hud._resize(); hud.centerMap(car.x, car.z, 0.12); }
+    S.keys = {};
+    if (S.mapOpen) { hud._resize(); hud.centerMap(car.x, car.z, 0.12); setTimeout(() => $('searchInput').focus(), 50); }
+    else { $('searchInput').blur(); }
   }
+  // ---- place search
+  let results = [], sel = 0, picked = null;
+  function showResults() {
+    $('searchRes').innerHTML = results.map((r, i) => `<button class="${i === sel ? 'on' : ''}" data-i="${i}"><span class="ic">${search.icon(r.kind)}</span><span>${esc(r.name)}<small>${r.kind}${r.alt ? ' · ' + esc(r.alt) : ''} · ${fmtDist(Math.hypot(r.x - car.x, r.z - car.z))}</small></span></button>`).join('');
+    $('searchRes').querySelectorAll('button').forEach(b => b.onclick = () => pick(results[+b.dataset.i]));
+  }
+  function pick(r) {
+    if (!r) return;
+    picked = r; hud.searchMark = r;
+    hud.centerMap(r.x, r.z, 0.6);
+    $('pcName').textContent = r.name; $('pcSub').textContent = `${r.kind}${r.alt ? ' · ' + r.alt : ''} · ${fmtDist(Math.hypot(r.x - car.x, r.z - car.z))} away`;
+    $('placeCard').classList.remove('hidden');
+    results = []; showResults(); $('searchInput').blur();
+  }
+  $('searchInput').addEventListener('input', (e) => { sel = 0; results = search.find(e.target.value, 10, car); showResults(); });
+  $('searchInput').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'ArrowDown') { sel = Math.min(results.length - 1, sel + 1); showResults(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); showResults(); e.preventDefault(); }
+    if (e.key === 'Enter') pick(results[sel]);
+    if (e.key === 'Escape') { if (e.target.value) { e.target.value = ''; results = []; showResults(); } else toggleMap(false); }
+  });
+  $('pcRoute').onclick = () => { if (!picked) return; game.setRoute(picked.x, picked.z, picked.name); hud.toast(`🧭 Route to ${esc(picked.name)}`, 2); toggleMap(false); };
+  $('pcGo').onclick = () => { if (!picked) return; teleport(picked.x, picked.z); hud.toast(`⚡ ${esc(picked.name)}`, 2); toggleMap(false); };
   hud.onMapClick = (x, z, shift) => {
+    $('placeCard').classList.add('hidden'); hud.searchMark = null;
     if (shift) { teleport(x, z); toggleMap(false); return; }
     game.setRoute(x, z, 'Waypoint'); hud.toast('GPS route set', 1.2);
   };
@@ -294,6 +365,13 @@ async function boot() {
       }
       setCar(c.id, car.color, true); game.save(car); renderGarage();
     });
+    const cost = Math.round(car.damage * 3 + car.dents * 5);
+    $('dmgTxt').textContent = car.damage > 1 || car.dents ? `Damage ${Math.round(car.damage)}% · ${cost} coins` : 'Your car is in perfect shape';
+    $('repairBtn').onclick = () => {
+      if (!(car.damage > 1 || car.dents)) return;
+      if (game.money < cost) { hud.toast('Not enough coins', 1.2); return; }
+      game.money -= cost; car.repair(); updateEngineSmoke(); audio.cash(); renderGarage();
+    };
     $('colors').innerHTML = COLORS.map(c => `<button class="sw" style="background:#${c.toString(16).padStart(6, '0')}" data-c="${c}"></button>`).join('');
     $('colors').querySelectorAll('button').forEach(b => b.onclick = () => { car.setColor(+b.dataset.c); game.homeColor = +b.dataset.c; game.save(car); });
   }
@@ -324,7 +402,8 @@ async function boot() {
       <h4>Graphics</h4>
       ${sel('preset', 'Quality preset', [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra'], ['custom', 'Custom']])}
       ${rng('scale', 'Resolution', 0.5, 2, 0.05, v => Math.round(v * 100) + '%')}
-      ${rng('view', 'View distance', 600, 2600, 100, v => v + ' m')}
+      ${rng('view', 'Detail distance', 600, 2600, 100, v => v + ' m')}
+      ${rng('far', 'City skyline distance', 0, 10000, 500, v => v ? (v / 1000) + ' km' : 'off')}
       ${tog('shadows', 'Shadows')}${tog('bloom', 'Bloom & colour grading')}${tog('msaa', 'Anti-aliasing')}
       ${rng('fov', 'Field of view', 50, 85, 1, v => v + '°')}
       <h4>World</h4>
@@ -346,14 +425,14 @@ async function boot() {
     </div></div>`;
     const box = $('settingsBox');
     box.querySelectorAll('.tog').forEach(b => b.onclick = () => { const k = b.dataset.k; settings[k] = !settings[k]; b.classList.toggle('on', settings[k]); changed(k); });
-    box.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { const k = r.dataset.k; settings[k] = +r.value; const v = $('v_' + k); if (v) v.textContent = r.parentElement.querySelector('small').textContent = (k === 'view' ? r.value + ' m' : k === 'fov' ? r.value + '°' : k === 'timeSpeed' ? (+r.value ? r.value + '×' : 'paused') : Math.round(r.value * 100) + '%'); changed(k); });
+    box.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { const k = r.dataset.k; settings[k] = +r.value; const v = $('v_' + k); if (v) v.textContent = r.parentElement.querySelector('small').textContent = (k === 'view' ? r.value + ' m' : k === 'far' ? (+r.value ? r.value / 1000 + ' km' : 'off') : k === 'fov' ? r.value + '°' : k === 'timeSpeed' ? (+r.value ? r.value + '×' : 'paused') : Math.round(r.value * 100) + '%'); changed(k); });
     box.querySelectorAll('select').forEach(s => s.onchange = () => { const k = s.dataset.k; settings[k] = k === 'manual' ? s.value === 'true' : s.value; changed(k); });
     box.querySelector('input[type=text]').onchange = (e) => { settings.name = e.target.value.trim().slice(0, 18) || 'Driver'; changed('name'); };
     $('resetProg').onclick = () => { if (confirm('Reset coins, cars and landmarks?')) { localStorage.removeItem('bishkekDrive'); location.reload(); } };
   }
   function changed(k) {
     if (k === 'preset' && PRESETS[settings.preset]) { Object.assign(settings, PRESETS[settings.preset]); renderSettings(); }
-    else if (['scale', 'view', 'shadows', 'bloom', 'msaa'].includes(k)) settings.preset = 'custom';
+    else if (['scale', 'view', 'far', 'shadows', 'bloom', 'msaa'].includes(k)) settings.preset = 'custom';
     if (['scale', 'preset'].includes(k)) { applyScale(); renderer.setSize(window.innerWidth, window.innerHeight); }
     if (['shadows', 'preset'].includes(k)) { renderer.shadowMap.enabled = settings.shadows; scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); }); }
     if (['bloom', 'msaa', 'preset', 'scale'].includes(k)) buildPost();
@@ -374,8 +453,12 @@ async function boot() {
     $('menu').classList.add('hidden');
     S.mode = 'drive'; S.paused = false; rig.snap(car);
     if (settings.mp) net.connect(settings.name);
-    hud.toast(`Salam, <b>${esc(settings.name)}</b>! Press <b>J</b> to find work · <b>Esc</b> for menu`, 5);
+    let seenIntro = false; try { seenIntro = !!localStorage.getItem('bd_intro'); } catch (e) { /* ignore */ }
+    if (!seenIntro) { S.paused = true; $('intro').classList.remove('hidden'); }
+    else hud.toast(`Salam, <b>${esc(settings.name)}</b>! <b>J</b> jobs · <b>M</b> map · <b>Esc</b> menu`, 4);
   };
+
+  $('introGo').onclick = () => { $('intro').classList.add('hidden'); S.paused = false; try { localStorage.setItem('bd_intro', '1'); } catch (e) { /* ignore */ } hud.toast(`Salam, <b>${esc(settings.name)}</b>! Press <b>J</b> to start working`, 4); };
 
   // ---------------------------------------------------------------- airport
   function interact() {
@@ -421,7 +504,7 @@ async function boot() {
     S.ending = true; const F = S.flight;
     fade(true); await sleep(700);
     airport.endScenic(F); S.flight = null; S.ending = false;
-    S.mode = 'drive'; world.radius = settings.view; camera.far = 4200; camera.updateProjectionMatrix();
+    S.mode = 'drive'; world.radius = settings.view; camera.far = Math.max(4200, (settings.far || 0) + 800); camera.updateProjectionMatrix();
     hud.setFlightInfo(null); rig.snap(car); fade(false);
     hud.toast(skipped ? 'Back at Manas airport' : 'Welcome back to Bishkek!', 2.5);
   }
@@ -511,10 +594,7 @@ async function boot() {
         car.surface = onRoad || airport.runwayIncursion(car.x, car.z) ? 1 : 0.72;
         info.road = road && road.dist < road.e.w / 2 + 4 ? road : null;
         const inp = S.mode === 'spot' ? { steer: 0, throttle: 0, brake: 1, hand: true } : input;
-        car.update(dt, inp, world, traffic, (v, what) => {
-          if (settings.shake) rig.shake = Math.min(0.6, v * 0.04);
-          audio.crash(v);
-        });
+        car.update(dt, inp, world, traffic, onCrash);
       }
       const focus = S.mode === 'flight' ? Object.assign(focusObj, { x: S.flight.plane.x, z: S.flight.plane.z, h: S.flight.plane.h, speed: 0 }) : car;
       traffic.night = night;
@@ -523,6 +603,19 @@ async function boot() {
       for (const c of traffic.honks) { const d = Math.hypot(c.x - car.x, c.z - car.z); audio.horn(Math.min(0.3, 6 / (d + 8)), 0.35 + Math.random() * 0.4, 0.8 + Math.random() * 0.5); }
       airport.update(dt, night, car, S.flight ? S.flight.plane : null);
       landmarks.update(dt, S.time, night);
+      if (S.mode === 'drive' || S.mode === 'cutscene') {
+        const pr = police.update(dt, car, () => { S.mode = 'cutscene'; document.body.classList.add('cinemode'); jobs.active && jobs.stop(car, setCar, true); });
+        if (pr && pr.cam) { S.cutCam = pr; }
+        if (pr && pr.done) {
+          S.mode = 'drive'; document.body.classList.remove('cinemode'); S.cutCam = null;
+          game.money -= pr.fine;
+          game.fines.push({ kind: 'Arrest', amount: pr.fine, detail: 'Caught by the patrol police', time: hud.clockText() });
+          rig.snap(car); game.save(car);
+          hud.toast(`Released after paying ${pr.fine} coins`, 3);
+        }
+      }
+      fx.update(dt);
+      if (frames % 60 === 0) for (const e of [...fx.emitters]) if (e.ai && !traffic.cars.includes(e.obj)) fx.removeEmitter(e);
       if (S.mode === 'drive') {
         const nm = info.road ? map.roadName(info.road.e.name) : null;
         info.street = nm ? nm.en : null;
@@ -593,7 +686,7 @@ async function boot() {
     if (sc.right !== want) { sc.left = sc.bottom = -want; sc.right = sc.top = want; sc.updateProjectionMatrix(); }
     world.setNight(lit.night);
     if (post) post.setNight(lit.night);
-    if (S.mode !== 'flight') { scene.fog.near = 350; scene.fog.far = world.radius + 700; }
+    if (S.mode !== 'flight') { scene.fog.near = 450; scene.fog.far = Math.max(world.radius + 700, (settings.far || 0) * 1.15); }
     const jet = airport.noiseAt(camera.position.x, camera.position.z, camera.position.y);
     audio.update(dt, car, { throttle: input.throttle, inFlight: S.mode === 'flight', cityLevel: Math.min(1, traffic.cars.length / 200) * (Math.abs(car.z) < 6000 ? 1 : 0.2), jet: S.mode === 'flight' ? 0.35 : jet });
 

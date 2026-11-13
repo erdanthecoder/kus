@@ -43,6 +43,7 @@ export class PlayerCar {
     this.lightMat = new THREE.MeshStandardMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 0.2 });
     const p = new THREE.Mesh(v.paint, this.paintMat); p.castShadow = true;
     const d = new THREE.Mesh(v.detailNoWheels, detailMat); d.castShadow = true;
+    this.paintMesh = p; this.detailMesh = d; this.damage = 0; this.dents = 0;
     this.lightMesh = new THREE.Mesh(v.lights, this.lightMat);
     this.body.add(p, d, this.lightMesh);
     // brake light glow quads
@@ -96,6 +97,27 @@ export class PlayerCar {
     this.radius = T.W / 2 + 0.05;
     this.color = col;
   }
+
+  // crumple the body around a world-space impact point
+  dent(wx, wz, amount) {
+    const dx = wx - this.x, dz = wz - this.z, c = Math.cos(this.h), s = Math.sin(this.h);
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    const R = 1.25, top = this.spec.roof[2][1];
+    for (const m of [this.paintMesh, this.detailMesh]) {
+      const pos = m.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const d = Math.hypot(x - lx, z - lz);
+        if (d > R || y > top + 0.1) continue;
+        const f = Math.pow(1 - d / R, 2) * amount;
+        const cl = Math.hypot(x, z * 0.35) || 1;
+        pos.setXYZ(i, x - x / cl * f * 0.6 - Math.sign(lx) * 0 , y - f * 0.15 * (y > 0.9 ? 1 : 0.3), z - Math.sign(z) * f * (Math.abs(lz) > this.spec.L * 0.3 ? 0.5 : 0.1));
+      }
+      pos.needsUpdate = true;
+    }
+    this.dents++;
+  }
+  repair() { this.setType(this.type, this.color); }
 
   setColor(c) { this.paintMat.color.setHex(c); this.color = c; }
 
@@ -221,7 +243,7 @@ export class PlayerCar {
           this.vx -= res.nx * vn * 1.25; this.vz -= res.nz * vn * 1.25;
           this.vx *= 0.94; this.vz *= 0.94;
           this.r += (off > 0 ? 1 : -1) * vn * 0.02 * Math.sign(res.nx * Math.cos(this.h) - res.nz * Math.sin(this.h));
-          if (-vn > 2) { onCrash && onCrash(-vn, 'wall'); this.damage = Math.min(100, this.damage + (-vn) * 0.6); }
+          if (-vn > 2) { onCrash && onCrash(-vn, 'wall', null, cx - res.nx * this.radius, cz - res.nz * this.radius, res.nx, res.nz); this.damage = Math.min(100, this.damage + (-vn) * 0.6); }
         }
       }
     }
@@ -249,7 +271,8 @@ export class PlayerCar {
     this.rpmTarget = Math.min(7300, Math.max(900, rpm));
     if (this.shiftT > 0) { this.shiftT -= 1 / 180; return 0.25; }
     const x = Math.min(1, rpm / 6500);
-    return 0.72 + 0.38 * Math.sin(x * Math.PI);
+    const health = this.damage >= 100 ? 0.3 : 1 - this.damage / 300;
+    return (0.72 + 0.38 * Math.sin(x * Math.PI)) * health;
   }
 
   _visual(dt, inp) {

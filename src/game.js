@@ -73,6 +73,7 @@ export class Game {
     this.fines.push(f);
     this.audio.fine();
     this.hud.showFine(f);
+    this.onFine && this.onFine(f);
   }
 
   // --------------------------------------------------------------- rules

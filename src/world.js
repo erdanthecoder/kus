@@ -98,6 +98,36 @@ export class World {
       this._buildChunk(c);
       if (!forceAll && performance.now() - t0 > (this.radius > 2000 ? 14 : 8)) break;
     }
+    // ---- far city: simplified building meshes out to farRadius (whole skyline visible)
+    const FR = this.farRadius || 0;
+    if (FR > R) {
+      if (!this.far) { this.far = new Map(); this.farRoot = new THREE.Group(); this.scene.add(this.farRoot); }
+      if (!this._farScan || performance.now() - this._farScan > 400) {
+        this._farScan = performance.now();
+        const f0x = Math.floor((cx - FR) / CHUNK), f1x = Math.floor((cx + FR) / CHUNK), f0z = Math.floor((cz - FR) / CHUNK), f1z = Math.floor((cz + FR) / CHUNK);
+        const fw = [];
+        for (let x = f0x; x <= f1x; x++) for (let z = f0z; z <= f1z; z++) {
+          const k = ck(x, z); if (this.far.has(k)) continue;
+          const c = this.map.chunks.get(k); if (!c || !c.buildings.length) continue;
+          const d = Math.hypot((x + 0.5) * CHUNK - cx, (z + 0.5) * CHUNK - cz);
+          if (d < FR && d > R - 600) fw.push([d, c]);
+        }
+        fw.sort((a, b) => a[0] - b[0]);
+        this._farQueue = fw;
+      }
+      const t1 = performance.now();
+      while (this._farQueue && this._farQueue.length && performance.now() - t1 < (forceAll ? 50 : 4)) {
+        const [, c] = this._farQueue.shift();
+        if (!this.far.has(c.key)) this._buildFar(c);
+      }
+      for (const [k, F] of this.far) {
+        const d = Math.hypot(F.x - cx, F.z - cz);
+        if (d > FR + 800) { this.farRoot.remove(F.mesh); F.mesh.geometry.dispose(); this.far.delete(k); continue; }
+        const L = this.live.get(k);
+        F.mesh.visible = !(L && L.group.visible) && d < FR + 200;
+      }
+    } else if (this.far && this.far.size) { for (const F of this.far.values()) { this.farRoot.remove(F.mesh); F.mesh.geometry.dispose(); } this.far.clear(); }
+
     // LOD visibility + disposal
     for (const [k, L] of this.live) {
       const d = Math.hypot(L.x - cx, L.z - cz);
@@ -107,6 +137,22 @@ export class World {
       if (L.trees) { L.trees.visible = d < 280; L.treesLow.visible = d >= 280 && d < 1400; }
       if (L.marks) L.marks.visible = d < 700;
     }
+  }
+
+  _buildFar(c) {
+    const rnd = mulberry(c.key * 7 + 13);
+    const gb = new GB({ aInfo: 2, aWin: 2 });
+    for (const B of c.buildings) {
+      const big = B.h >= 6 || (B.x1 - B.x0) * (B.z1 - B.z0) > 160;
+      if (!big && rnd() < 0.6) continue;
+      this._building(gb, B, rnd, false);
+    }
+    const x = (c.cx + 0.5) * CHUNK, z = (c.cz + 0.5) * CHUNK;
+    if (gb.empty) { this.far.set(c.key, { mesh: new THREE.Group(), x, z }); this.far.get(c.key).mesh.geometry = { dispose() { } }; return; }
+    const mesh = new THREE.Mesh(gb.build(), this.mat.building);
+    mesh.matrixAutoUpdate = false;
+    this.farRoot.add(mesh);
+    this.far.set(c.key, { mesh, x, z });
   }
 
   _dispose(k, L) {
