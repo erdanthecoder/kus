@@ -7,7 +7,7 @@ import { signalPoleGeometry, signalLampGeometry } from './props.js';
 import { CLASS_SPEED, CHUNK, ck } from './data.js';
 
 const TYPES = [
-  ['sedan', 0.34], ['hatch', 0.14], ['suv', 0.15], ['oldsedan', 0.08], ['van', 0.13], ['taxi', 0.06], ['bus', 0.05], ['truck', 0.05],
+  ['sedan', 0.34], ['hatch', 0.14], ['suv', 0.15], ['oldsedan', 0.08], ['van', 0.13], ['taxi', 0.06], ['bus', 0.04], ['trolley', 0.04], ['truck', 0.04],
 ];
 const CLASS_W = [3, 6, 4, 2.2, 0.6, 0.15, 0.02];
 const JAM_NAMES = /Чүй|Чуй|Chuy|Жибек|Jibek|Манас|Manas|Ахунбаев|Akhunbaev|Абдрахманов|Abdrahmanov|Киев|Kyiv|Москва|Moscow|Токтогул|Toktogul|Айтматов|Aytmatov|Шабдан|Shabdan/;
@@ -25,7 +25,7 @@ export class Traffic {
     const detMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.3 });
     const lightMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     for (const [t] of TYPES) {
-      const v = buildVehicle(t === 'taxi' ? 'sedan' : t, { taxi: t === 'taxi' });
+      const v = buildVehicle(t === 'taxi' ? 'sedan' : t === 'trolley' ? 'bus' : t, { taxi: t === 'taxi', trolley: t === 'trolley' });
       const cap = 200;
       const p = new THREE.InstancedMesh(v.paint, paintMat, cap);
       const d = new THREE.InstancedMesh(v.detail, detMat, cap);
@@ -145,10 +145,10 @@ export class Traffic {
       const m = this.models[type];
       if (m.n >= m.cap) continue;
       m.n++;
-      const v0 = CLASS_SPEED[e.cls] * (0.85 + Math.random() * 0.3) * (type === 'bus' || type === 'truck' ? 0.85 : 1);
+      const v0 = CLASS_SPEED[e.cls] * (0.85 + Math.random() * 0.3) * (type === 'bus' || type === 'trolley' || type === 'truck' ? 0.85 : 1);
       const car = {
-        type, spec: m.spec, e, dir, de, s, lane: type === 'van' || type === 'bus' ? e.lanes - 1 : lane, v: v0 * 0.7, v0,
-        color: type === 'van' ? (Math.random() < 0.8 ? 0xf4f4f4 : 0xf2d020) : type === 'bus' ? (Math.random() < 0.5 ? 0x2a7a3a : 0xe8e0d0) : type === 'taxi' ? (Math.random() < 0.5 ? 0xf2f2f2 : 0xf2c200) : TRAFFIC_COLORS[Math.floor(Math.random() * TRAFFIC_COLORS.length)],
+        type, spec: m.spec, e, dir, de, s, lane: type === 'van' || type === 'bus' || type === 'trolley' ? e.lanes - 1 : lane, v: v0 * 0.7, v0,
+        color: type === 'van' ? (Math.random() < 0.8 ? 0xf4f4f4 : 0xf2d020) : type === 'trolley' ? (Math.random() < 0.5 ? 0x2a6ab8 : 0xd8dce0) : type === 'bus' ? (Math.random() < 0.5 ? 0x2a7a3a : 0xe8e0d0) : type === 'taxi' ? (Math.random() < 0.5 ? 0xf2f2f2 : 0xf2c200) : TRAFFIC_COLORS[Math.floor(Math.random() * TRAFFIC_COLORS.length)],
         x: o.x, z: o.z, h: Math.atan2(o.dx, o.dz), ex: 0, ez: 0, next: -1, wait: 0, bump: 0, brake: false, stopT: 0, servedStop: -1,
         aggr: 0.8 + Math.random() * 0.5,
       };
@@ -175,7 +175,7 @@ export class Traffic {
       const cos = o.dx * o2.dx + o.dz * o2.dz;
       let w = (cos > 0.7 ? 4 : cos > -0.3 ? 1 : 0.15) * (CLASS_W[e.cls] + 0.2);
       if (e.cls === 5) w *= 0.2;
-      if (car.type === 'bus' || car.type === 'truck') w *= e.cls <= 2 ? 2 : 0.3;
+      if (car.type === 'bus' || car.type === 'trolley' || car.type === 'truck') w *= e.cls <= 2 ? 3 : 0.2;
       opts.push(de, w); tot += w;
     }
     if (!tot) return car.e.ow ? -1 : (car.de ^ 1);
@@ -248,7 +248,7 @@ export class Traffic {
         }
       }
       // ---- marshrutka / bus stops
-      if ((c.type === 'van' || c.type === 'bus') && c.stopT <= 0) {
+      if ((c.type === 'van' || c.type === 'bus' || c.type === 'trolley') && c.stopT <= 0) {
         const st = this.stopsOn.get(c.de);
         if (st) for (const s of st) {
           const dist = s - c.s;
@@ -312,8 +312,8 @@ export class Traffic {
         if (c.next < 0) { c.dead = true; break; }
         c.s -= c.e.len;
         c.de = c.next; c.e = map.edges[c.de >> 1]; c.dir = c.de & 1;
-        c.lane = c.type === 'van' || c.type === 'bus' ? c.e.lanes - 1 : Math.min(c.e.lanes - 1, Math.floor(Math.random() * c.e.lanes));
-        c.v0 = CLASS_SPEED[c.e.cls] * (0.85 + Math.random() * 0.3) * (c.type === 'bus' || c.type === 'truck' ? 0.85 : 1);
+        c.lane = c.type === 'van' || c.type === 'bus' || c.type === 'trolley' ? c.e.lanes - 1 : Math.min(c.e.lanes - 1, Math.floor(Math.random() * c.e.lanes));
+        c.v0 = CLASS_SPEED[c.e.cls] * (0.85 + Math.random() * 0.3) * (c.type === 'bus' || c.type === 'trolley' || c.type === 'truck' ? 0.85 : 1);
         c.next = this._chooseNext(c);
         c.transit = true;
       }

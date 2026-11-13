@@ -63,7 +63,7 @@ export class PostFX {
   setSize(w, h) { this.composer.setSize(w, h); }
   setNight(n) {
     this.bloom.strength = 0.18 + n * 0.7;
-    this.bloom.threshold = 2.2 - n * 1.5;
+    this.bloom.threshold = 14 - n * 13.1;
     this.grade.uniforms.uWarm.value = 0.015 * (1 - n);
     this.grade.uniforms.uSat.value = 1.08 - n * 0.1;
   }

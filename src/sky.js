@@ -14,7 +14,7 @@ export class Environment {
     const u = this.sky.material.uniforms;
     u.turbidity.value = 2.6; u.rayleigh.value = 2.2; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.85;
     // clamp the sun disk so HDR post-processing (half-float bloom) never overflows
-    for (const sk of [this.sky]) sk.material.fragmentShader = sk.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( min( retColor, vec3( 24.0 ) ), 1.0 );');
+    for (const sk of [this.sky]) sk.material.fragmentShader = sk.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( min( retColor * 0.42, vec3( 24.0 ) ), 1.0 );');
     this.bg.add(this.sky);
     this._stars();
     this._mountains();
@@ -68,12 +68,12 @@ export class Environment {
     };
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), zl = p.getZ(i);
-      const z = zl + 26000 + 26000; // world z from 26 km to 78 km
+      const z = zl + 26000 + 13000; // world z from 13 km to 65 km (foothills begin right after the city)
       const dz = z - 26000;
       // foothills start ~16 km south of the centre
       const rise = Math.min(1, Math.max(0, (dz + 6000) / 14000));
       const ridge = Math.exp(-((dz - 16000) ** 2) / (2 * 9000 ** 2));
-      let h = rise * rise * 900 + ridge * 3400 * (0.75 + 0.35 * noise(x, z)) + Math.abs(noise(x * 1.7, z * 1.7)) * 600 * rise;
+      let h = rise * rise * 1100 + ridge * 4100 * (0.75 + 0.35 * noise(x, z)) + Math.abs(noise(x * 1.7, z * 1.7)) * 600 * rise;
       h *= Math.min(1, Math.max(0.15, 1 - Math.abs(x) / 120000));
       p.setXYZ(i, x, Math.max(-40, h - 120), z);
     }
@@ -96,17 +96,17 @@ export class Environment {
         void main(){
           vec3 n = normalize(vN);
           float slope = 1.0 - n.y;
-          float snowLine = 2600.0 + 500.0*sin(vW.x*0.0006) + 200.0*h(floor(vW.xz/300.0));
+          float snowLine = 2050.0 + 500.0*sin(vW.x*0.0006) + 200.0*h(floor(vW.xz/300.0));
           float snow = smoothstep(snowLine-250.0, snowLine+150.0, vW.y + slope*-900.0);
           vec3 rock = mix(vec3(0.42,0.38,0.33), vec3(0.32,0.30,0.29), smoothstep(0.2,0.6,slope));
           vec3 grass = vec3(0.45,0.47,0.30);
           vec3 c = mix(grass, rock, smoothstep(700.0, 1800.0, vW.y));
-          c = mix(c, vec3(0.95,0.97,1.0), snow);
+          c = mix(c, vec3(1.0,1.02,1.06), snow);
           float d = max(0.0, dot(n, normalize(sunDir)));
           vec3 col = c * (0.35 + 0.9*d) * light;
           float dist = length(vW.xz - camPos.xz);
-          float haze = 1.0 - exp(-dist/75000.0);
-          col = mix(col, fogCol, clamp(haze*0.85, 0.0, 0.8));
+          float haze = 1.0 - exp(-dist/110000.0);
+          col = mix(col, fogCol, clamp(haze*0.75, 0.0, 0.5));
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -125,7 +125,7 @@ export class Environment {
 
   _clouds() {
     this.cloudMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: U.uTime, sunDir: { value: new THREE.Vector3(0, 1, 0) }, day: { value: 1 }, fogCol: { value: new THREE.Color() }, cover: { value: 0.45 }, camPos: { value: new THREE.Vector3() } },
+      uniforms: { uTime: U.uTime, sunDir: { value: new THREE.Vector3(0, 1, 0) }, day: { value: 1 }, fogCol: { value: new THREE.Color() }, cover: { value: 0.58 }, camPos: { value: new THREE.Vector3() } },
       vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
       fragmentShader: `uniform float uTime; uniform vec3 sunDir; uniform float day; uniform vec3 fogCol; uniform float cover; uniform vec3 camPos; varying vec3 vW;
         float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }

@@ -125,7 +125,7 @@ export class HUD {
 
   drawMini(car, traffic, game, airport, net, extra) {
     const c = this.mctx, W = this.mini.width, H = this.mini.height, d = this.dpr;
-    const s = 0.55 * d * (car.speed > 25 ? 0.75 : 1); // px per metre
+    const s = 0.55 * d * (this.miniZoom || 1) * (car.speed > 25 ? 0.75 : 1); // px per metre
     this._miniBase(car, s, airport);
     c.save();
     c.clearRect(0, 0, W, H);
@@ -195,10 +195,36 @@ export class HUD {
     });
     this.big.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const k = e.deltaY < 0 ? 1.2 : 1 / 1.2;
-      this.mapView.s = Math.max(0.02, Math.min(2.5, this.mapView.s * k));
-      this.mapDirty = true;
+      const r = this.big.getBoundingClientRect();
+      this.zoomMap(e.deltaY < 0 ? 1.25 : 1 / 1.25, (e.clientX - r.left) * this.dpr, (e.clientY - r.top) * this.dpr);
     }, { passive: false });
+    // touch: one finger drags, two fingers pinch-zoom, tap = route
+    let tch = null;
+    const pts = (e) => [...e.touches].map(t => [t.clientX, t.clientY]);
+    this.big.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const p = pts(e);
+      tch = { p, x: this.mapView.x, z: this.mapView.z, s: this.mapView.s, moved: false, d: p.length > 1 ? Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]) : 0 };
+    }, { passive: false });
+    this.big.addEventListener('touchmove', (e) => {
+      e.preventDefault(); if (!tch) return;
+      const p = pts(e);
+      if (p.length > 1 && tch.d) {
+        const d = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]);
+        this.mapView.s = Math.max(0.015, Math.min(4, tch.s * d / tch.d)); tch.moved = true;
+      } else if (p.length === 1) {
+        const dx = p[0][0] - tch.p[0][0], dy = p[0][1] - tch.p[0][1];
+        if (Math.abs(dx) + Math.abs(dy) > 6) tch.moved = true;
+        this.mapView.x = tch.x - dx * this.dpr / this.mapView.s; this.mapView.z = tch.z - dy * this.dpr / this.mapView.s;
+      }
+    }, { passive: false });
+    this.big.addEventListener('touchend', (e) => {
+      if (tch && !tch.moved && e.touches.length === 0 && this.onMapClick) {
+        const r = this.big.getBoundingClientRect(), [cx, cy] = tch.p[0];
+        this.onMapClick(this.mapView.x + ((cx - r.left) * this.dpr - this.big.width / 2) / this.mapView.s, this.mapView.z + ((cy - r.top) * this.dpr - this.big.height / 2) / this.mapView.s, false);
+      }
+      if (e.touches.length === 0) tch = null; else tch = { p: pts(e), x: this.mapView.x, z: this.mapView.z, s: this.mapView.s, moved: true, d: 0 };
+    });
   }
 
   drawBigMap(car, game, airport, net) {
@@ -271,6 +297,26 @@ export class HUD {
     c.restore();
     // labels
     const toS = (x, z) => [(x - v.x) * s + W / 2, (z - v.z) * s + H / 2];
+    // every named place from OpenStreetMap, more detail as you zoom in
+    if (s > 0.12) {
+      c.font = `500 ${10 * this.dpr}px Inter, Arial`; c.textAlign = 'center';
+      const placed = [];
+      const tryLabel = (txt, x, z, col, r) => {
+        const [sx, sy] = toS(x, z);
+        if (sx < 0 || sx > W || sy < 0 || sy > H) return;
+        if (placed.some(q => Math.abs(q[0] - sx) < 70 * this.dpr && Math.abs(q[1] - sy) < 14 * this.dpr)) return;
+        placed.push([sx, sy]);
+        c.fillStyle = col; c.beginPath(); c.arc(sx, sy, r * this.dpr, 0, 7); c.fill();
+        c.fillStyle = 'rgba(0,0,0,.7)'; c.fillText(txt, sx + 1, sy - 6 * this.dpr + 1);
+        c.fillStyle = '#e8eef4'; c.fillText(txt, sx, sy - 6 * this.dpr);
+      };
+      for (const p of this.map.pois) tryLabel((p.en || p.name).slice(0, 28), p.x, p.z, '#7ec8ff', 3);
+      if (s > 0.55) for (const ch of this.map.chunks.values()) {
+        const cx0 = ch.cx * 400, cz0 = ch.cz * 400;
+        if (cx0 > x1 + 400 || cx0 + 400 < x0 - 400 || cz0 > z1 + 400 || cz0 + 400 < z0 - 400) continue;
+        for (const sg of ch.signs) tryLabel(sg.name.slice(0, 24), sg.x, sg.z, '#ffb070', 2.5);
+      }
+    }
     c.font = `600 ${12 * this.dpr}px Inter, Arial`; c.textAlign = 'center';
     for (const p of PLACES) {
       if (p.x === undefined) continue;
@@ -301,6 +347,16 @@ export class HUD {
     c.fillText('Map data © OpenStreetMap contributors', W - 10 * this.dpr, H - 10 * this.dpr);
   }
 
+  zoomMap(k, cx, cy) {
+    // zoom around a screen point (defaults to the centre)
+    const v = this.mapView, W = this.big.width, H = this.big.height;
+    const px = cx ?? W / 2, py = cy ?? H / 2;
+    const wx = v.x + (px - W / 2) / v.s, wz = v.z + (py - H / 2) / v.s;
+    v.s = Math.max(0.015, Math.min(4, v.s * k));
+    v.x = wx - (px - W / 2) / v.s; v.z = wz - (py - H / 2) / v.s;
+  }
+  zoomMini(k) { this.miniZoom = Math.max(0.35, Math.min(3, (this.miniZoom || 1) * k)); }
+
   centerMap(x, z, s) { this.mapView.x = x; this.mapView.z = z; if (s) this.mapView.s = s; }
 
   // ------------------------------------------------------------ text widgets
@@ -324,11 +380,11 @@ export class HUD {
     const t = this.clockText() + (online !== null && online !== undefined ? ` · <span class="dot ${online > 0 ? 'on' : ''}"></span>${online + 1}` : '');
     if (t !== this._clk) { this._clk = t; $('clock').innerHTML = t; }
   }
-  setLimit(kmh, wrongWay, runway) {
+  setLimit(kmh, wrongWay, runway, extra) {
     const over = kmh > SPEED_LIMIT;
     $('limit').classList.toggle('show', kmh > SPEED_LIMIT - 12);
     $('limit').classList.toggle('over', over);
-    const w = runway ? 'ACTIVE RUNWAY – LEAVE NOW' : wrongWay ? 'WRONG WAY' : '';
+    const w = runway ? 'ACTIVE RUNWAY – LEAVE NOW' : wrongWay ? 'WRONG WAY – ONE-WAY STREET' : (extra || '');
     if (w !== this._w) { this._w = w; $('warn').textContent = w; $('warn').classList.toggle('show', !!w); }
   }
   setMission(text) {

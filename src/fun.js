@@ -310,7 +310,7 @@ export class Weather {
     U.uSnow.value = snow * a;
     this.world.ground.material.color.copy(this.base.ground).lerp(new THREE.Color(0.85, 0.86, 0.88), snow * a * 0.35);
     this.exposure = 1 - snow * a * 0.22;
-    if (this.env.cloudMat) this.env.cloudMat.uniforms.cover.value = 0.45 - a * 0.35;
+    if (this.env.cloudMat) this.env.cloudMat.uniforms.cover.value = 0.58 - a * 0.45;
     this.grip = 1 - a * (snow ? 0.3 : 0.12);
     this.fogMul = 1 - a * 0.55;
     this.dark = a * (snow ? 0.15 : 0.35);

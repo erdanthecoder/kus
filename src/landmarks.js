@@ -48,6 +48,8 @@ export class Landmarks {
     this._fountains([[525, -78], [544, -80], [559, -79], [581, -78], [597, -78], [613, -77], [159, -204], [416, -193], [710, -100], [711, -128], [614, -271], [627, 469], [716, 132]]);
     this._ferris(-330, -270);           // Panfilov park amusement rides
     this._mig(-498, 179);
+    this._whiteHouse();
+    this._ordo();
   }
 
   _col(x, z, r) { // square collision box around a monument base
@@ -292,6 +294,91 @@ export class Landmarks {
     g.position.set(x, 6.8, z); g.rotation.set(-0.35, 1.2, 0);
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     this.g.add(g);
+  }
+
+  _findB(re) { return this.map.buildings.filter(b => b.name && re.test(b.name)).sort((a, b) => (b.x1 - b.x0) * (b.z1 - b.z0) - (a.x1 - a.x0) * (a.z1 - a.z0))[0]; }
+
+  // small waving flag on a pole (on roofs, in front of buildings)
+  _miniFlag(x, y, z, size = 1) {
+    if (!this.flagTex) this.flagTex = flagTexture();
+    const W = 3.2 * size, H = 1.9 * size;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * size, 0.07 * size, 6 * size, 6), new THREE.MeshStandardMaterial({ color: 0xcfd3d8, metalness: 0.8, roughness: 0.3 }));
+    pole.position.set(x, y + 3 * size, z);
+    const geo = new THREE.PlaneGeometry(W, H, 12, 6).translate(W / 2, 0, 0);
+    const mat = new THREE.MeshStandardMaterial({ map: this.flagTex, side: THREE.DoubleSide, roughness: 0.8 });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = U.uTime;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float k = position.x / ${W.toFixed(2)};
+          transformed.z += sin(position.x*1.6 - uTime*4.0 + ${(x * 0.1).toFixed(2)}) * 0.35 * k * ${size.toFixed(2)};`);
+    };
+    const f = new THREE.Mesh(geo, mat); f.position.set(x + 0.06, y + 6 * size - H / 2 - 0.1, z);
+    this.g.add(pole, f);
+  }
+
+  // Ak Uy – the White House on Chuy Avenue: white marble block with tall vertical pilasters
+  _whiteHouse() {
+    const B = this._findB(/Жогорку Кеңеш|National Parliament|White House|Ак үй|Белый дом/);
+    if (!B) return;
+    const p = B.pts, n = p.length / 2, h = Math.max(B.h, 26);
+    let A = 0; for (let i = 0; i < n; i++) { const j = (i + 1) % n; A += p[i * 2] * p[j * 2 + 1] - p[j * 2] * p[i * 2 + 1]; }
+    const out = A > 0 ? 1 : -1;
+    const fins = [];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const x0 = p[i * 2], z0 = p[i * 2 + 1], x1 = p[j * 2], z1 = p[j * 2 + 1];
+      const L = Math.hypot(x1 - x0, z1 - z0); if (L < 8) continue;
+      const nx = (z1 - z0) / L * out, nz = -(x1 - x0) / L * out;
+      const cnt = Math.floor(L / 3.4);
+      for (let k = 0; k <= cnt; k++) { const t = k / cnt; fins.push([x0 + (x1 - x0) * t + nx * 0.45, z0 + (z1 - z0) * t + nz * 0.45, Math.atan2(nx, nz)]); }
+    }
+    const marble = new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.35, metalness: 0.05 });
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, h - 3, 0.9), marble, fins.length);
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
+    fins.forEach(([x, z, a], i) => { Q.setFromAxisAngle(Y, a); M.compose(new THREE.Vector3(x, 3 + (h - 3) / 2, z), Q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, M); });
+    im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere();
+    this.g.add(im);
+    // heavy roof cornice
+    const cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2;
+    const cor = new THREE.Mesh(new THREE.BoxGeometry(B.x1 - B.x0 + 1.6, 1.4, B.z1 - B.z0 + 1.6), marble);
+    cor.position.set(cx, h + 0.7, cz); cor.castShadow = true; this.g.add(cor);
+    this._miniFlag(cx, h + 1.4, cz, 1.6);
+  }
+
+  // Yntymak Ordo – the new presidential palace (2022) in the south of the city
+  _ordo() {
+    const B = this._findB(/Ынтымак Ордо|Yntymak Ordo/);
+    if (!B) return;
+    const cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2;
+    const w = B.x1 - B.x0, d = B.z1 - B.z0, h = Math.max(B.h, 18);
+    const white = new THREE.MeshStandardMaterial({ color: 0xf5f2ea, roughness: 0.4 });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xd8b040, metalness: 1, roughness: 0.25 });
+    const r = Math.min(w, d) * 0.22;
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 7, 32), white); drum.position.set(cx, h + 3.5, cz);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xe9edf2, metalness: 0.3, roughness: 0.2 }));
+    dome.position.set(cx, h + 7, cz); dome.scale.y = 0.85;
+    const lantern = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.15, r * 0.18, 3, 16), gold); lantern.position.set(cx, h + 7 + r * 0.85 + 1.5, cz);
+    this.g.add(drum, dome, lantern);
+    // colonnade around the drum
+    for (let i = 0; i < 16; i++) {
+      const a = i / 16 * Math.PI * 2;
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 7, 10), white);
+      c.position.set(cx + Math.cos(a) * (r + 0.8), h + 3.5, cz + Math.sin(a) * (r + 0.8)); this.g.add(c);
+    }
+    // portico with columns on the longest side facing the street
+    const portW = Math.max(w, d) * 0.4, side = w > d ? 'z' : 'x';
+    for (let i = 0; i < 8; i++) {
+      const t = (i / 7 - 0.5) * portW;
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, h * 0.9, 12), white);
+      if (side === 'z') c.position.set(cx + t, h * 0.45, B.z1 + 3); else c.position.set(B.x1 + 3, h * 0.45, cz + t);
+      this.g.add(c);
+    }
+    const pedi = new THREE.Mesh(new THREE.BoxGeometry(side === 'z' ? portW + 3 : 6, 1.6, side === 'z' ? 6 : portW + 3), white);
+    pedi.position.set(side === 'z' ? cx : B.x1 + 1.5, h * 0.9 + 0.8, side === 'z' ? B.z1 + 1.5 : cz); this.g.add(pedi);
+    this.g.children.slice(-30).forEach(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this._miniFlag(cx + w * 0.3, h, cz, 1.3);
+    this._miniFlag(cx - w * 0.3, h, cz, 1.3);
   }
 
   update(dt, time, night) {

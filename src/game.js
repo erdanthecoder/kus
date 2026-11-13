@@ -1,6 +1,7 @@
 // Game rules: traffic fines (150 km/h limit, red lights, wrong way, runway incursion),
 // taxi missions between real Bishkek places, landmark discovery, GPS routing.
 import * as THREE from 'three';
+import { pointInPoly, CHUNK, ck } from './data.js';
 
 export const SPEED_LIMIT = 150; // km/h – go faster and you get fined
 
@@ -20,6 +21,30 @@ export const PLACES = [
   { id: 'opera', name: 'Opera & Ballet Theatre', local: 'Опера жана балет театры', match: /Opera and Ballet/, fact: 'The Abdylas Maldybaev National Opera and Ballet Theatre, a neoclassical building from 1955.' },
   { id: 'vefa', name: 'Vefa Center', local: 'Вефа', match: /Vefa Center/, fact: 'A popular mall on the corner of Gorky and Sovetskaya streets in the south of the city.' },
   { id: 'erkindik', name: 'Erkindik Boulevard', local: 'Эркиндик бульвары', x: 230, z: 320, fact: '"Freedom" boulevard: a long pedestrian alley lined with huge oak and elm trees, running south from the centre.' },
+  { id: 'whitehouse', name: 'White House (Ак үй)', local: 'Ак үй · Жогорку Кеңеш', x: -277, z: -40, fact: 'The 7-storey white marble "Ak Uy" on Chuy Avenue, built in 1985. Today it houses the Jogorku Kenesh, Kyrgyzstan\'s parliament.' },
+  { id: 'ordo', name: 'Yntymak Ordo (new White House)', local: 'Ынтымак Ордо', x: -1751, z: 7480, fact: 'The new presidential palace in the south of Bishkek, opened in 2022. The Presidential Administration moved here from the old White House.' },
+  { id: 'cityhall', name: 'Bishkek City Hall', local: 'Бишкек шаардык мэриясы', x: -1389, z: 60, fact: 'The mayor\'s office of Bishkek, on Chuy Avenue next to the National Bank.' },
+  { id: 'natbank', name: 'National Bank', local: 'Улуттук банк', x: -1436, z: 30, fact: 'Head office of the National Bank of the Kyrgyz Republic, which issues the som.' },
+  { id: 'gorky', name: 'Gorky Park', local: 'Горький сквери', x: -887, z: -237, fact: 'A shady square park next to the Philharmonic and the Kojomkul Sports Palace.' },
+  { id: 'kojomkul', name: 'Kojomkul Sports Palace', local: 'Кожомкул атындагы спорт сарайы', x: -726, z: -211, fact: 'Named after the legendary strongman Kojomkul. Wrestling, boxing and concerts.' },
+  { id: 'spartak', name: 'Spartak Stadium', local: 'Спартак стадиону', x: -588, z: -470, fact: 'The national stadium (also called Dolen Omurzakov Stadium) where Kyrgyzstan\'s football team plays.' },
+  { id: 'caravan', name: 'Caravan Mall', local: 'Караван', x: -798, z: 199, fact: 'A shopping centre on Kievskaya street, near the Sheraton.' },
+  { id: 'sheraton', name: 'Sheraton Bishkek', local: 'Шератон', x: -1057, z: 171, fact: 'A 23-floor hotel – one of the tallest buildings in central Bishkek.' },
+  { id: 'hyatt', name: 'Hyatt Regency', local: 'Хаятт Ридженси', x: 759, z: -362, fact: 'The classic business hotel next to the Opera and Ballet Theatre and Oak Park.' },
+  { id: 'knu', name: 'Kyrgyz National University', local: 'КНУ им. Ж. Баласагына', x: -1495, z: -555, fact: 'The country\'s oldest university, founded in 1925 and named after the poet Jusup Balasagyn.' },
+  { id: 'auca', name: 'American University of Central Asia', local: 'АУЦА', x: 1918, z: 7200, fact: 'AUCA\'s modern campus in the south of Bishkek, opened in 2015.' },
+  { id: 'botanic', name: 'Botanical Garden', local: 'Ботаникалык бак', x: -1051, z: 1915, fact: 'The E. Z. Gareev Botanical Garden, with thousands of plant species and quiet alleys.' },
+  { id: 'ataturk', name: 'Ataturk Park', local: 'Ататүрк сейил багы', x: -782, z: 4370, fact: 'A large park in the south with a lake, fountains and a monument to Atatürk.' },
+  { id: 'station', name: 'Bishkek-2 Railway Station', local: 'Бишкек-2 вокзалы', x: 190, z: 1290, fact: 'The main railway station. Trains leave for Balykchy (Issyk-Kul) and Moscow.' },
+  { id: 'eastbus', name: 'Eastern Bus Station', local: 'Чыгыш автовокзалы', x: 2131, z: -1213, fact: 'Marshrutkas and buses to the east: Issyk-Kul, Kant and Tokmok.' },
+  { id: 'alamedin', name: 'Alamedin Bazaar', local: 'Аламүдүн базары', x: 2784, z: -1202, fact: 'A busy market in the east of the city – fruit, vegetables and everything for the home.' },
+  { id: 'ortosai', name: 'Orto-Sai Bazaar', local: 'Орто-Сай базары', x: 1095, z: 4501, fact: 'The southern bazaar on the Ala-Archa road, famous for fresh produce.' },
+  { id: 'tashrabat', name: 'Tash-Rabat Mall', local: 'Таш-Рабат', x: 1350, z: 2140, fact: 'A popular mall on Gorky street, named after the 15th-century stone caravanserai.' },
+  { id: 'arena', name: 'Bishkek Arena', local: 'Бишкек Арена', x: -6465, z: 5340, fact: 'A large arena in the west of the city, built for concerts and sports.' },
+  { id: 'nomad', name: 'Nomad Arena Ice Rink', local: 'Номад Арена', x: 5046, z: 1978, fact: 'The city ice rink in the east of Bishkek.' },
+  { id: 'conservatory', name: 'National Conservatory', local: 'Улуттук консерватория', x: 773, z: 3392, fact: 'The Kyrgyz National Conservatory, where komuz players and opera singers train.' },
+  { id: 'post', name: 'Main Post Office', local: 'Башкы почтамт', x: 710, z: 171, fact: 'The central post office on the corner of Chuy Avenue and Sovetskaya street.' },
+  { id: 'bcity', name: 'Bishkek City Center', local: 'Бишкек Сити', x: 1019, z: -577, fact: 'A business district with new glass towers north-east of the centre.' },
   { id: 'airport', name: 'Manas International Airport', local: 'Манас эл аралык аэропорту', airport: true, fact: 'Bishkek\'s airport (FRU), about 25 km north-west of the centre. Its single 4,200 m runway is one of the longest in Central Asia.' },
 ];
 
@@ -67,9 +92,9 @@ export class Game {
     try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades })); } catch (e) { /* ignore */ }
   }
 
-  issueFine(kind, amount, detail, photo) {
+  issueFine(kind, amount, detail, photo, heat = 0) {
     this.money -= amount;
-    const f = { kind, amount, detail, time: this.hud.clockText(), photo };
+    const f = { kind, amount, detail, time: this.hud.clockText(), photo, heat };
     this.fines.push(f);
     this.audio.fine();
     this.hud.showFine(f);
@@ -141,6 +166,104 @@ export class Game {
         requestPhoto((photo) => this.issueFine('Runway incursion', 1000, 'Entered the active runway at Manas International Airport', photo));
       }
     } else { this.runwayT = 0; info.runway = false; }
+    this._moreRules(dt, car, info, kmh, requestPhoto);
+  }
+
+  // Every other way people drive wrong in Bishkek: live warning first, then a camera fine,
+  // and serious or repeated violations bring the patrol police.
+  _moreRules(dt, car, info, kmh, requestPhoto) {
+    const T = this.time;
+    this.cool = this.cool || {}; this.tm = this.tm || {};
+    const tm = this.tm;
+    const street = info.street || 'the street';
+    const fine = (key, kind, amount, detail, heat) => {
+      if ((this.cool[key] || 0) > T) return;
+      this.cool[key] = T + 10;
+      requestPhoto((photo) => this.issueFine(kind, amount, detail, photo, heat));
+    };
+    const timer = (key, on) => { tm[key] = on ? (tm[key] || 0) + dt : 0; return tm[key]; };
+    let warn = '';
+    const fx = Math.sin(car.h), fz = Math.cos(car.h);
+    const r = info.road;
+    // 1) oncoming lane on a two-way road (overtaking for a moment is tolerated)
+    let onc = false;
+    if (r && !r.e.ow && kmh > 12 && r.e.w >= 6 && r.e.cls <= 4 && r.dist < r.e.w / 2 + 0.5) {
+      const dot = fx * r.dx + fz * r.dz;
+      const latT = dot >= 0 ? r.lat : -r.lat; // + = right of our travel direction
+      onc = Math.abs(dot) > 0.7 && latT < -0.9;
+    }
+    const tO = timer('onc', onc);
+    if (tO > 0.6) warn = 'ONCOMING LANE – KEEP RIGHT';
+    if (tO > 2.5) { tm.onc = 0; fine('onc', 'Oncoming lane', 120, `Drove in the oncoming lane on ${street}`, 0.5); }
+    // 2) sidewalks, parks, pedestrian squares (checked 5x per second)
+    this._zoneT = (this._zoneT || 0) - dt;
+    if (this._zoneT <= 0) {
+      this._zoneT = 0.2;
+      let zone = '';
+      if (kmh > 6 && !info.runway) {
+        const nr = this.map.nearestRoad(car.x, car.z, 14);
+        const onRoad = nr && nr.dist < nr.e.w / 2 + 0.4;
+        if (!onRoad) {
+          const gx = Math.floor(car.x / CHUNK), gz = Math.floor(car.z / CHUNK);
+          for (let ox = -1; ox <= 1 && zone !== 'square'; ox++) for (let oz = -1; oz <= 1; oz++) {
+            const c = this.map.chunks.get(ck(gx + ox, gz + oz)); if (!c) continue;
+            for (const A of c.areas) {
+              if (car.x < A.x0 || car.x > A.x1 || car.z < A.z0 || car.z > A.z1) continue;
+              if (![0, 1, 4, 5, 11].includes(A.type) || !pointInPoly(car.x, car.z, A.pts)) continue;
+              if (A.type === 11) { zone = 'square'; break; }
+              zone = 'park';
+            }
+          }
+          if (!zone && nr && nr.e.cls >= 1 && nr.e.cls <= 4 && nr.e.w >= 5 && nr.dist < nr.e.w / 2 + 3.6) zone = 'sidewalk';
+        }
+      }
+      this._zone = zone;
+    }
+    const tS = timer('sidewalk', this._zone === 'sidewalk'), tP = timer('park', this._zone === 'park'), tQ = timer('square', this._zone === 'square');
+    if (tS > 0.3) warn = 'GET OFF THE SIDEWALK!';
+    if (tP > 0.3) warn = 'NO DRIVING IN THE PARK!';
+    if (tQ > 0.3) warn = 'PEDESTRIAN ZONE – NO CARS!';
+    if (tS > 1.5) { tm.sidewalk = 0; fine('sidewalk', 'Driving on the sidewalk', 150, `Drove on the sidewalk of ${street}`, 0.6); }
+    if (tP > 1.5) { tm.park = 0; fine('park', 'Driving through a park', 250, 'Drove through a park / lawn', 0.8); }
+    if (tQ > 1.2) { tm.square = 0; fine('square', 'Pedestrian zone', 400, 'Drove into a pedestrian square', 1.2); }
+    // 3) endangering pedestrians
+    if (this.peds && kmh > 22) {
+      for (const p of this.peds.list) {
+        if (p.fixed) continue;
+        const dx = p.x - car.x, dz = p.z - car.z;
+        if (dx * dx + dz * dz < 6.5) { warn = 'WATCH OUT – PEDESTRIAN!'; fine('ped', 'Endangering a pedestrian', 300, `Nearly hit a pedestrian at ${Math.round(kmh)} km/h`, 1.0); break; }
+      }
+    }
+    // 4) not yielding at a zebra crossing while someone is crossing
+    if (this.peds && kmh > 8 && this.peds.crossers.length) {
+      for (const p of this.peds.crossers) {
+        const d = Math.hypot(p.x - car.x, p.z - car.z);
+        if (d < 7) { warn = 'STOP – PEOPLE ON THE ZEBRA!'; if (d < 4.5) fine('zebra', 'Did not yield at zebra', 150, 'Did not give way to pedestrians at a zebra crossing', 0.4); break; }
+      }
+    }
+    // 5) about to run a red light
+    if (r && kmh > 15 && !warn) {
+      const dot = fx * r.dx + fz * r.dz, dir = dot >= 0 ? 0 : 1;
+      const s = dir ? r.e.len - r.s : r.s;
+      for (const sg of r.e.signals) {
+        if (sg.dir !== dir) continue;
+        const d = sg.stop - s;
+        if (d > 0 && d < 30 && this.map.signalState(sg.cluster, sg.group, this.trafficTime) === 'R') { warn = 'RED LIGHT – STOP!'; break; }
+      }
+    }
+    if (kmh > 150 && !warn) warn = 'SPEEDING – SLOW DOWN';
+    if (warn && !this._lastWarn) this.onWarn && this.onWarn(warn);
+    this._lastWarn = warn;
+    info.warn = warn;
+  }
+
+  // collisions with other cars = road traffic accident (ДТП)
+  accident(v, requestPhoto) {
+    this.cool = this.cool || {};
+    if ((this.cool.dtp || 0) > this.time) return;
+    this.cool.dtp = this.time + 4;
+    const amount = v > 12 ? 400 : v > 7 ? 250 : 120;
+    requestPhoto((photo) => this.issueFine('Road accident (ДТП)', amount, `Crashed into another car at ${Math.round(v * 3.6)} km/h`, photo, v > 7 ? 1 : 0.4));
   }
 
   // --------------------------------------------------------------- landmarks

@@ -13,6 +13,37 @@ const PAL = {
   pub: [0xe6e2da, 0xc99a88, 0xdcd4c4, 0xe9e4d8, 0xc7a18e],
   roofHouse: [0x3f6e4a, 0x8a3a2e, 0x3a5a7a, 0x7a7a78, 0x9a4a32, 0x5a6a5a, 0xa0a4a8],
 };
+// fictional local adverts (Russian / Kyrgyz) for roadside billboards
+function makeAdAtlas() {
+  const c = document.createElement('canvas'); c.width = 2048; c.height = 1024;
+  const x = c.getContext('2d');
+  const ads = [
+    ['#d8261c', '#ffcf3a', 'НАН & САМСА', 'горячие из тандыра · 24/7'],
+    ['#1667b8', '#ffffff', 'ИССЫК-КӨЛ КҮТӨТ!', 'туры на Иссык-Куль от 2 990 сом'],
+    ['#f2c200', '#141414', 'БИШКЕК ТАКСИ', 'звоните · 1515'],
+    ['#2a7a3a', '#fff4d0', 'КЫМЫЗ · МАКСЫМ', 'Ала-Тоо дасторкону'],
+    ['#0e2a4a', '#5fd4ff', 'ШУМКАР БАНК', 'кредит онлайн за 5 минут'],
+    ['#ffffff', '#c8102e', 'ЖАҢЫ ҮЙЛӨР', 'новостройки в центре · ипотека 4%'],
+    ['#c8102e', '#ffffff', 'САКТАН! ЖОЛДО ЭТИЯТ БОЛ', 'берегите пешеходов · 60 км/ч'],
+    ['#5a2a8a', '#ffd84a', 'TULPAR AIR', 'Бишкек ✈ Ош от 2 500 сом'],
+  ];
+  ads.forEach(([bg, fg, title, sub], i) => {
+    const X = (i % 4) * 512, Y = Math.floor(i / 4) * 512;
+    const gr = x.createLinearGradient(X, Y, X + 512, Y + 512); gr.addColorStop(0, bg); gr.addColorStop(1, shade(bg, -40));
+    x.fillStyle = gr; x.fillRect(X, Y, 512, 512);
+    x.fillStyle = 'rgba(255,255,255,0.08)'; x.beginPath(); x.arc(X + 420, Y + 120, 160, 0, 7); x.fill();
+    x.fillStyle = fg; x.textAlign = 'center'; x.textBaseline = 'middle';
+    let fs = 64; x.font = `900 ${fs}px Arial`; while (x.measureText(title).width > 470 && fs > 30) { fs -= 4; x.font = `900 ${fs}px Arial`; }
+    x.fillText(title, X + 256, Y + 220);
+    x.font = '600 30px Arial'; x.fillText(sub, X + 256, Y + 310);
+    x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(X, Y + 470, 512, 42);
+    x.fillStyle = '#fff'; x.font = '600 22px Arial'; x.fillText('bishkek · reklama', X + 256, Y + 491);
+  });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+function shade(hex, d) { const n = parseInt(hex.slice(1), 16); const r = Math.max(0, Math.min(255, (n >> 16) + d)), g = Math.max(0, Math.min(255, ((n >> 8) & 255) + d)), b = Math.max(0, Math.min(255, (n & 255) + d)); return `rgb(${r},${g},${b})`; }
+
 const AREA_STYLE = {
   // type: [material key, color, y]
   0: ['grass', 0xffffff, 0.012], 1: ['grass', 0xf0c8d0, 0.014], 2: ['grass', 0xa8c098, 0.013], 3: ['water', 0x3a6a80, 0.006],
@@ -329,6 +360,10 @@ export class World {
       im.castShadow = true; im.computeBoundingSphere(); ig.computeBoundingSphere();
       group.add(im, ig);
     }
+    // trolleybus overhead wires & poles on the big avenues (very Bishkek)
+    this._trolley(c, group);
+    // billboards along the avenues
+    this._billboards(c, group, rnd);
     // bus stops (real OSM bus stop locations)
     if (c.busstops.length) {
       const pts = [];
@@ -424,6 +459,93 @@ export class World {
     const mat = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.05 + this.night * 0.9, roughness: 0.5, side: THREE.DoubleSide });
     const m = new THREE.Mesh(g, mat);
     group.add(m); L.signMat = mat; L.signTex = t;
+  }
+
+  _trolley(c, group) {
+    const RE = /Чүй|Чуй|Chuy|Манас|Manas|Абдрахманов|Abdrahmanov|Жибек|Jibek|Ибраимов|Ibraimov|Ахунбаев|Akhunbaev|Токтогул|Toktogul|Киев|Kyiv|Москва|Moscow|Шабдан|Shabdan|Айтматов|Aytmatov|Фрунзе|Frunze|Горький|Gorky/;
+    const wire = [], poles = [];
+    const o = {}, o2 = {};
+    for (const e of c.edges) {
+      if (e.cls > 2 || e.name < 0 || e.len < 30) continue;
+      const nm = this.map.names[e.name];
+      if (!RE.test(nm[0]) && !RE.test(nm[1] || '')) continue;
+      const dirs = e.ow ? [0] : [0, 1];
+      const step = 32;
+      for (let s = 4; s < e.len - 2; s += step) {
+        const s2 = Math.min(e.len - 1, s + step);
+        for (const dir of dirs) {
+          const lane = this.map.laneOffset(e, e.lanes - 1);
+          for (const dw of [-0.32, 0.32]) {
+            // sagging wire between two supports
+            let px = null, pz = null, py = null;
+            for (let k = 0; k <= 4; k++) {
+              const t = k / 4, ss = s + (s2 - s) * t;
+              this.map.sample(e, dir, dir ? e.len - ss : ss, lane + dw, o);
+              const y = 6.3 - Math.sin(t * Math.PI) * 0.25;
+              if (px !== null) wire.push(px, py, pz, o.x, y, o.z);
+              px = o.x; py = y; pz = o.z;
+            }
+          }
+        }
+        // poles on both kerbs + span wire across
+        this.map.sample(e, 0, s, e.w / 2 + 0.7, o); this.map.sample(e, 0, s, -e.w / 2 - 0.7, o2);
+        if (!this.map.insideBuilding(o.x, o.z, 0.3)) poles.push(o.x, o.z);
+        if (!this.map.insideBuilding(o2.x, o2.z, 0.3)) poles.push(o2.x, o2.z);
+        wire.push(o.x, 6.9, o.z, o2.x, 6.9, o2.z);
+      }
+    }
+    if (wire.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+      const ls = new THREE.LineSegments(g, this.wireMat || (this.wireMat = new THREE.LineBasicMaterial({ color: 0x1c1c1c })));
+      group.add(ls);
+    }
+    if (poles.length) {
+      const n = poles.length / 2;
+      const geo = this.poleGeo || (this.poleGeo = new THREE.CylinderGeometry(0.1, 0.15, 7.4, 6).translate(0, 3.7, 0));
+      const im = new THREE.InstancedMesh(geo, this.poleMat || (this.poleMat = new THREE.MeshStandardMaterial({ color: 0x5c6066, roughness: 0.6, metalness: 0.4 })), n);
+      const M = new THREE.Matrix4();
+      for (let i = 0; i < n; i++) { M.makeTranslation(poles[i * 2], 0, poles[i * 2 + 1]); im.setMatrixAt(i, M); }
+      im.castShadow = true; im.computeBoundingSphere(); group.add(im);
+    }
+  }
+
+  _billboards(c, group, rnd) {
+    if (!this.adTex) this.adTex = makeAdAtlas();
+    const pos = [], uv = [], nor = [], idx = [], legs = [];
+    const o = {};
+    for (const e of c.edges) {
+      if (e.cls > 2 || e.len < 120) continue;
+      for (let s = 60 + rnd() * 80; s < e.len - 40; s += 240 + rnd() * 140) {
+        const side = rnd() < 0.5 ? 1 : -1;
+        this.map.sample(e, 0, s, (e.w / 2 + 5.5) * side, o);
+        if (this.map.insideBuilding(o.x, o.z, 4)) continue;
+        const nr = this.map.nearestRoad(o.x, o.z, 12); if (nr && nr.dist < nr.e.w / 2 + 2) continue;
+        // board faces traffic coming towards it (angled 25° to the road)
+        const ang = Math.atan2(o.dx, o.dz) + side * 0.45 + (side > 0 ? Math.PI : 0);
+        const fx = Math.sin(ang), fz = Math.cos(ang), rx = Math.cos(ang), rz = -Math.sin(ang);
+        const W = 6, H = 3, y0 = 4.2;
+        const cell = Math.floor(rnd() * 8), cu = (cell % 4) / 4, cv = Math.floor(cell / 4) / 2;
+        for (const back of [0, 1]) {
+          const b = pos.length / 3, f = back ? -1 : 1;
+          for (const [kx, ky] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) { pos.push(o.x + rx * kx * W / 2 * f - fx * 0.06 * back, y0 + ky * H, o.z + rz * kx * W / 2 * f - fz * 0.06 * back); nor.push(fx * f, 0, fz * f); }
+          if (back) uv.push(0.001, 0.001, 0.002, 0.001, 0.002, 0.002, 0.001, 0.002);
+          else uv.push(cu, 1 - cv - 0.5, cu + 0.25, 1 - cv - 0.5, cu + 0.25, 1 - cv, cu, 1 - cv);
+          idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+        }
+        legs.push(o.x + rx * 1.6, o.z + rz * 1.6, o.x - rx * 1.6, o.z - rz * 1.6);
+      }
+    }
+    if (!pos.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    if (!this.adMat) this.adMat = new THREE.MeshStandardMaterial({ map: this.adTex, emissiveMap: this.adTex, emissive: 0xffffff, emissiveIntensity: 0.05, roughness: 0.6, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(g, this.adMat); m.castShadow = true; group.add(m);
+    const n = legs.length / 2;
+    const geo = this.legGeo || (this.legGeo = new THREE.CylinderGeometry(0.14, 0.18, 4.3, 6).translate(0, 2.15, 0));
+    const im = new THREE.InstancedMesh(geo, this.poleMat || (this.poleMat = new THREE.MeshStandardMaterial({ color: 0x5c6066, roughness: 0.6, metalness: 0.4 })), n);
+    const M = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) { M.makeTranslation(legs[i * 2], 0, legs[i * 2 + 1]); im.setMatrixAt(i, M); }
+    im.castShadow = true; im.computeBoundingSphere(); group.add(im);
   }
 
   _blocked(x, z, own, margin) {
@@ -540,6 +662,7 @@ export class World {
       default: style = 2; color = pick(PAL.panel);
     }
     if (B.name && /Historical|Музей|museum|Филармон|Philharmonic|Opera|Театр|Theat/i.test(B.name)) { style = 5; color = 0xe8e4dc; }
+    if (B.name && /Жогорку Кеңеш|National Parliament|Ынтымак Ордо|Yntymak Ordo|City Hall|Мэрия|National Bank/i.test(B.name)) { style = 5; color = 0xf3f1ec; kind = 7; }
     let c = hexColor(color);
     if (B.colour) { try { const oc = new THREE.Color(B.colour); if (B.colour !== 'white' || kind !== 3) c = [oc.r, oc.g, oc.b]; } catch (e) { /* bad tag */ } }
     const jit = 0.92 + rnd() * 0.12;
@@ -678,6 +801,7 @@ export class World {
   }
 
   setNight(n) {
+    if (this.adMat) this.adMat.emissiveIntensity = 0.05 + n * 0.75;
     if (Math.abs((this.night || 0) - n) > 0.02) for (const L of this.live.values()) if (L.signMat) L.signMat.emissiveIntensity = 0.05 + n * 0.9;
     this.night = n;
     U.uNight.value = n;

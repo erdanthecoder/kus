@@ -184,6 +184,14 @@ export function buildVehicle(typeName, opts = {}) {
   }
   if (typeName === 'van') detail.push(colorize(box(0.9, 0.22, 0.03, 0.2, 2.25, 2.0), 0xf0e030));
   if (typeName === 'bus') detail.push(colorize(box(1.6, 0.3, 0.05, 0, 2.55, 5.92), 0xff8a10));
+  if (opts.trolley) {
+    // trolleybus current-collector poles reaching up to the overhead wires
+    for (const s of [-1, 1]) {
+      const g = new THREE.BoxGeometry(0.07, 0.07, 5.6).rotateX(-0.5).translate(s * 0.32, 3.1 + 1.33, -2.4);
+      detail.push(colorize(g, 0x1a1a1a));
+      detail.push(colorize(box(0.3, 0.25, 0.6, s * 0.32, 3.2, 0.2), 0x333333));
+    }
+  }
   // wheels (as detail for instanced traffic)
   const wheel = makeWheel(T.wr, typeName === 'bus' || typeName === 'truck' ? 0.32 : 0.23);
   const wpos = wheelPositions(T);

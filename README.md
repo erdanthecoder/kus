@@ -17,6 +17,22 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Update: rules, places, Bishkek look
+
+- **Every way of driving wrong is now punished.** A flashing warning and a police whistle come first, then a camera fine with a photo, and the police get involved if you keep going:
+  - driving in the oncoming lane
+  - wrong way on one-way streets
+  - driving on sidewalks, through parks and on pedestrian squares (Ala-Too!)
+  - endangering pedestrians
+  - not yielding at zebra crossings
+  - road accidents (ДТП)
+  - red lights
+  - speeding over 150 km/h
+  - entering the runway
+- **40 discoverable places**, including the **White House (Ак үй)** with marble pilasters and a roof flag, and the new presidential palace **Ынтымак Ордо** with its dome and colonnade. Also City Hall, the National Bank, Spartak Stadium, KNU, AUCA, the Botanical Garden, Ataturk Park, the Bishkek-2 railway station, the Eastern bus station, the Alamedin and Orto-Sai bazaars, Tash-Rabat, Bishkek Arena and more. The big map labels hundreds of real places and shops as you zoom in.
+- **Map zoom:** +/− buttons, zoom towards the mouse, pinch-zoom and drag on phones, and minimap zoom (+/− buttons or keys).
+- **Looks like Bishkek:** trolleybus overhead wires and poles on Chuy, Manas, Sovetskaya and the other avenues, real trolleybuses in traffic, roadside billboards with local ads, a blue sky with lighter clouds, and the snow-capped Ala-Too range brought closer behind the city.
+
 ## Newest
 
 - **Nitro** (Shift) with blue exhaust flames; **drift scoring** with combo multipliers that pay coins and refill nitro.

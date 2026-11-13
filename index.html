@@ -57,8 +57,14 @@
   #limit.over { animation: pulse .45s infinite alternate; }
   @keyframes pulse { to { transform: scale(1.15); box-shadow: 0 0 26px rgba(255,40,40,.9); } }
   #minimap { position: absolute; left: 12px; bottom: 12px; width: 168px; height: 168px; border-radius: 50%; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
-  #warn { position: absolute; top: 46px; left: 50%; transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: rgba(200,20,20,.9); font-weight: 800; font-size: 13px; letter-spacing: .06em; opacity: 0; transition: .2s; }
-  #warn.show { opacity: 1; }
+  #warn { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); padding: 9px 22px; border-radius: 999px; background: rgba(210,20,20,.92); font-weight: 800; font-size: 16px; letter-spacing: .06em; opacity: 0; transition: .2s; box-shadow: 0 0 24px rgba(255,40,40,.6); white-space: nowrap; }
+  #warn.show { opacity: 1; animation: warnp .5s infinite alternate; }
+  @keyframes warnp { to { background: rgba(40,60,220,.92); box-shadow: 0 0 24px rgba(60,90,255,.7); } }
+  #mapZoom { position: absolute; right: 12px; bottom: 50px; display: flex; flex-direction: column; gap: 6px; }
+  #mapZoom button { width: 48px; height: 48px; font-size: 24px; font-weight: 800; border-radius: 12px; }
+  #miniZoom { position: absolute; left: 150px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; }
+  #miniZoom button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,14,20,.75); color: #fff; font-weight: 800; font-size: 16px; padding: 0; }
+  .nomini #miniZoom { display: none; }
   #toast { position: absolute; bottom: 196px; left: 50%; transform: translateX(-50%) translateY(10px); max-width: min(560px, 90vw); text-align: center; font-size: 14px; opacity: 0; transition: .35s; }
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #hint { position: absolute; bottom: 236px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0; transition: .2s; }
@@ -224,6 +230,7 @@
   <div id="toast" class="pill"></div>
   <div id="chat"></div>
   <canvas id="minimap"></canvas>
+  <div id="miniZoom"><button id="mzIn">+</button><button id="mzOut">−</button></div>
   <div id="limit">150</div>
   <canvas id="speedo"></canvas>
   <div id="nitroBox"><div id="nitroBar"></div></div>
@@ -301,6 +308,7 @@
   <div id="placeCard" class="hidden"><b id="pcName"></b><small id="pcSub"></small><div><button class="btn pri" id="pcRoute">🧭 Route</button> <button class="btn" id="pcGo">⚡ Go there</button></div></div>
   <div id="mapHelp" class="pill">Drag · wheel zoom · click = route · Shift+click = teleport</div>
   <button class="btn" id="mapClose">Close [M]</button>
+  <div id="mapZoom"><button class="btn" id="zIn">+</button><button class="btn" id="zOut">−</button><button class="btn" id="zMe" style="font-size:16px">◎</button></div>
 </div>
 
 <div id="airportMenu" class="overlay hidden">

@@ -207,6 +207,8 @@ async function boot() {
       case 'KeyR': resetCar(); break;
       case 'KeyG': if (game.routeTarget && !jobs.active) { game.clearRoute(); hud.toast('GPS cleared', 1.2); } break;
       case 'KeyK': hud.toast(audio.toggleMute() ? 'Sound off' : 'Sound on', 1.2); break;
+      case 'Equal': case 'NumpadAdd': if (S.mapOpen) hud.zoomMap(1.4); else hud.zoomMini(1.4); break;
+      case 'Minus': case 'NumpadSubtract': if (S.mapOpen) hud.zoomMap(1 / 1.4); else hud.zoomMini(1 / 1.4); break;
       case 'BracketRight': S.hour = (S.hour + 1) % 24; hud.toast(hud.clockText(), 0.8); break;
       case 'BracketLeft': S.hour = (S.hour + 23) % 24; hud.toast(hud.clockText(), 0.8); break;
       case 'KeyX': if (settings.manual) car.shiftUp(); break;
@@ -248,7 +250,7 @@ async function boot() {
   }
 
   // ---------------------------------------------------------------- on foot / car theft
-  const CAR_OF = { taxi: 'sedan', sedan: 'sedan', hatch: 'hatch', suv: 'suv', oldsedan: 'oldsedan', van: 'van', bus: 'bus', truck: 'truck' };
+  const CAR_OF = { trolley: 'bus', taxi: 'sedan', sedan: 'sedan', hatch: 'hatch', suv: 'suv', oldsedan: 'oldsedan', van: 'van', bus: 'bus', truck: 'truck' };
   function toggleFoot() {
     if (S.mode !== 'drive' || races.active) return;
     if (!S.onFoot) {
@@ -284,6 +286,7 @@ async function boot() {
       fx.crash(px, 0.6, pz, nx ?? 0, nz ?? 0, v, what === 'car' && other ? other.color : car.color);
       if (v > 4) car.dent(px, pz, Math.min(0.32, v * 0.022));
     }
+    if (what === 'car' && other && v > 4 && !races.active) game.accident(v, requestPhoto);
     if (what === 'car' && other) {
       if (wreck) {
         other.emitter = fx.emitter(other, [0, 1.0, other.spec.L * 0.32], true); other.emitter.ai = true;
@@ -301,7 +304,10 @@ async function boot() {
     if (car.damage <= 55 && S.engineSmoke) { fx.removeEmitter(S.engineSmoke); S.engineSmoke = null; }
   }
   police.onRam = () => updateEngineSmoke();
+  game.peds = peds;
+  game.onWarn = () => audio.whistle && audio.whistle();
   game.onFine = (f) => {
+    if (f.heat) police.crime(f.heat, f.kind);
     if (f.kind === 'Speeding' && f.amount >= 500) police.crime(1, 'Extreme speeding');
     else if (f.kind === 'Runway incursion') police.crime(2, 'Runway incursion');
     else if (f.kind === 'Red light') police.crime(0.35, 'Ran a red light');
@@ -384,6 +390,9 @@ async function boot() {
     game.setRoute(x, z, 'Waypoint'); hud.toast('GPS route set', 1.2);
   };
   $('mapClose').onclick = () => toggleMap(false);
+  $('zIn').onclick = () => hud.zoomMap(1.5); $('zOut').onclick = () => hud.zoomMap(1 / 1.5); $('zMe').onclick = () => hud.centerMap(me0().x, me0().z);
+  $('mzIn').onclick = () => hud.zoomMini(1.4); $('mzOut').onclick = () => hud.zoomMini(1 / 1.4);
+  const me0 = () => S.onFoot ? foot : car;
 
   function renderJobs() {
     $('jobCards').innerHTML = Object.entries(JOBS).map(([id, j]) => `<button class="card ${jobs.active?.type === id ? 'sel' : ''}" data-id="${id}"><div class="ic">${j.icon}</div><b>${j.name}</b><small>${j.desc}</small></button>`).join('');
@@ -730,7 +739,7 @@ async function boot() {
           if (jobs.nextIn <= 0) { const t = jobs.nextType; jobs.nextIn = undefined; jobs.start(t, car, scene, setCar); }
         }
         hud.setStreet(nm ? (nm.en !== nm.local ? `${nm.en}` : nm.local) : (info.runway ? 'Runway 07/25' : ''), nm && nm.en !== nm.local ? nm.local : districtOf(car.x, car.z));
-        hud.setLimit(car.speed * 3.6, info.wrongWay, info.runway);
+        hud.setLimit(car.speed * 3.6, info.wrongWay, info.runway, S.onFoot || races.active ? '' : info.warn);
         const dzn = Math.hypot(car.x - airport.dropoff.x, car.z - airport.dropoff.y);
         const dsp = Math.hypot(car.x - airport.spotter.x, car.z - airport.spotter.y);
         let hintTxt = dzn < 14 ? '<b>E</b> · Manas Airport' : dsp < 14 ? '<b>E</b> · watch planes land' : '';

@@ -131,6 +131,17 @@ export class Audio {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + d + 0.12);
   }
 
+  // traffic police whistle (short double blast)
+  whistle() {
+    if (!this.ctx) return;
+    const C = this.ctx, t = C.currentTime;
+    for (const [d, len] of [[0, 0.12], [0.18, 0.28]]) {
+      const o = C.createOscillator(); o.type = 'sine'; o.frequency.value = 2900;
+      const lfo = C.createOscillator(); lfo.frequency.value = 35; const lg = C.createGain(); lg.gain.value = 140; lfo.connect(lg); lg.connect(o.frequency);
+      const g = C.createGain(); g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(0.12, t + d + 0.02); g.gain.setValueAtTime(0.12, t + d + len); g.gain.linearRampToValueAtTime(0, t + d + len + 0.03);
+      o.connect(g); g.connect(this.master); o.start(t + d); lfo.start(t + d); o.stop(t + d + len + 0.05); lfo.stop(t + d + len + 0.05);
+    }
+  }
   chime() { this.blip(660, 0.1); setTimeout(() => this.blip(990, 0.15), 120); }
   cash() { this.blip(1200, 0.05, 0.1); setTimeout(() => this.blip(1600, 0.08, 0.1), 70); setTimeout(() => this.blip(2000, 0.1, 0.08), 150); }
   // airport PA "ding-dong"
