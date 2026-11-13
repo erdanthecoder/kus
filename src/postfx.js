@@ -6,6 +6,7 @@ import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 
 class DualScenePass extends Pass {
   constructor(env, scene, camera) { super(); this.env = env; this.scene = scene; this.camera = camera; this.needsSwap = false; }
@@ -53,6 +54,15 @@ export class PostFX {
     this.composer = new EffectComposer(renderer, rt);
     this.composer.addPass(new DualScenePass(env, scene, camera));
     this.composer.addPass(new ShaderPass(ClampShader));
+    if (opts.ao) {
+      // ground-truth ambient occlusion: soft contact shadows under cars, in corners and between buildings
+      this.ao = new GTAOPass(scene, camera, size.x, size.y);
+      this.ao.output = GTAOPass.OUTPUT.Default;
+      this.ao.blendIntensity = 0.85;
+      this.ao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.5, thickness: 2, scale: 1.4, samples: 12 });
+      this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      this.composer.addPass(this.ao);
+    }
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.35, 0.55, 0.92);
     this.bloom.enabled = opts.bloom !== false;
     this.composer.addPass(this.bloom);

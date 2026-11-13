@@ -243,6 +243,7 @@ export class Races {
   _finish() {
     const A = this.active, t = A.t;
     const medal = t <= A.gold ? '🥇 Gold' : t <= A.silver ? '🥈 Silver' : t <= A.bronze ? '🥉 Bronze' : 'Finished';
+    if (t <= A.gold) this.golds = (this.golds || 0) + 1;
     const prize = t <= A.gold ? 1500 : t <= A.silver ? 800 : t <= A.bronze ? 400 : 150;
     const best = this.best[A.R.id];
     const nb = !best || t < best;

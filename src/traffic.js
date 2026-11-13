@@ -164,6 +164,29 @@ export class Traffic {
   _endNode(de) { const e = this.map.edges[de >> 1]; return (de & 1) ? e.na : e.nb; }
 
   _chooseNext(car) {
+    if (car.convoy) {
+      const C = car.convoy;
+      if (C.route.has(car.de)) return C.route.get(car.de);
+    }
+    const r = this._chooseNext0(car);
+    if (car.convoy) car.convoy.route.set(car.de, r);
+    return r;
+  }
+  // spawn a convoy (wedding motorcade etc.) on a directed edge, cars one behind another
+  spawnConvoy(e, dir, list, flag) {
+    const C = { route: new Map(), cars: [], flag };
+    let s = Math.min(e.len - 5, 10 + list.length * 11);
+    for (const [type, color] of list) {
+      const m = this.models[type]; if (m.n >= m.cap) continue; m.n++;
+      const o = {}; this.map.sample(e, dir, s, this.map.laneOffset(e, e.lanes - 1), o);
+      const car = { type, spec: m.spec, e, dir, de: e.id * 2 + dir, s, lane: e.lanes - 1, v: 6, v0: 9, color, x: o.x, z: o.z, h: Math.atan2(o.dx, o.dz), ex: 0, ez: 0, next: -1, wait: 0, bump: 0, brake: false, stopT: 0, servedStop: -1, aggr: 1, convoy: C, [flag]: true };
+      car.next = this._chooseNext(car);
+      this.cars.push(car); C.cars.push(car);
+      s -= 11; if (s < 1) break;
+    }
+    return C;
+  }
+  _chooseNext0(car) {
     const node = this._endNode(car.de);
     const o = {}; this.map.sample(car.e, car.dir, car.e.len - 0.5, 0, o);
     let tot = 0; const opts = [];
@@ -203,7 +226,7 @@ export class Traffic {
     }
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const c = this.cars[i];
-      if (Math.abs(c.x - px) > 760 || Math.abs(c.z - pz) > 760) this._remove(i);
+      if (Math.abs(c.x - px) > (c.convoy ? 1400 : 760) || Math.abs(c.z - pz) > (c.convoy ? 1400 : 760)) this._remove(i);
     }
     // bucket by directed edge
     const buckets = new Map();
@@ -277,10 +300,16 @@ export class Traffic {
           if (fwd > 0 && fwd < 30 && lat < 2.6) { const g = fwd - myL / 2 - 1.5; if (g < gap) { gap = Math.max(0.01, g); lv = 0; } }
         }
       }
-      if (extraObstacles) for (const ob of extraObstacles) {
+      const obs = extraObstacles || this.obstacles;
+      if (obs) for (const ob of obs) {
         const rx = ob.x - c.x, rz = ob.z - c.z;
         const fwd = rx * hx + rz * hz, lat = Math.abs(rx * hz - rz * hx);
-        if (fwd > 0 && fwd < 40 && lat < ob.r) { const g = fwd - myL / 2 - ob.r; if (g < gap) { gap = Math.max(0.01, g); lv = 0; } }
+        if (fwd > 0 && fwd < 40 && lat < ob.r) {
+          const g = fwd - myL / 2 - ob.r;
+          if (g < gap) { gap = Math.max(0.01, g); lv = 0; }
+          // merge into another lane to get past (road works, wrecks)
+          if (fwd < 25 && c.e.lanes > 1 && (c.mergeT = (c.mergeT || 0) + dt) > 1.5) { c.lane = (c.lane + 1) % c.e.lanes; c.mergeT = -3; c.transit = true; }
+        }
       }
       // ---- IDM
       let v0 = c.v0;
@@ -313,7 +342,7 @@ export class Traffic {
         c.s -= c.e.len;
         c.de = c.next; c.e = map.edges[c.de >> 1]; c.dir = c.de & 1;
         c.lane = c.type === 'van' || c.type === 'bus' || c.type === 'trolley' ? c.e.lanes - 1 : Math.min(c.e.lanes - 1, Math.floor(Math.random() * c.e.lanes));
-        c.v0 = CLASS_SPEED[c.e.cls] * (0.85 + Math.random() * 0.3) * (c.type === 'bus' || c.type === 'trolley' || c.type === 'truck' ? 0.85 : 1);
+        c.v0 = c.convoy ? 9 : CLASS_SPEED[c.e.cls] * (0.85 + Math.random() * 0.3) * (c.type === 'bus' || c.type === 'trolley' || c.type === 'truck' ? 0.85 : 1);
         c.next = this._chooseNext(c);
         c.transit = true;
       }

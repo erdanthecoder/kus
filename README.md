@@ -17,6 +17,15 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Update: fuel, cameras, live events, awards
+- **Fuel** – every car has a real tank (AI‑92 or diesel). Fill up at 60 real Bishkek petrol stations taken from OpenStreetMap (Gazprom, BP, Shell, Kumtor…): stop under the canopy and press **E**. Prices are per litre and are paid from MBank.
+- **Safe City cameras** – 331 speed cameras at real junctions. They flash and send a fine with a photo to your phone.
+- **Lights and signals** – `,` and `.` for left/right indicators, `/` for hazards, **L** cycles the headlights (auto, on, off). Street lamps now cast warm pools of light on the road.
+- **Live city events** – wedding motorcades with flags, roadworks that close a lane so traffic merges, and accident scenes with police.
+- **Phone: Awards and Services** – 23 achievements worth +250 сом each, and a tow‑truck service when your car is wrecked.
+- **Graphics** – ambient occlusion (GTAO) on the High/Ultra presets.
+- **Touch joystick** on phones and tablets.
+
 ## Update: phone, MBank, jail, rent, real-time
 
 - **Buttons on screen:** 🗺 Map, 📱 Phone, ☰ Menu (top right). Tapping the minimap also opens the map.

@@ -358,7 +358,18 @@ export class World {
         im.setMatrixAt(i, M4); ig.setMatrixAt(i, M4);
       }
       im.castShadow = true; im.computeBoundingSphere(); ig.computeBoundingSphere();
-      group.add(im, ig);
+      // warm pool of light on the road under every lamp (visible at night)
+      if (!this.poolGeo) {
+        const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+        const gr = x.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+        this.poolGeo = new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2).translate(0, 0.16, -2.6);
+        this.mat.pool = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0xffb060, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -20 });
+      }
+      const pool = new THREE.InstancedMesh(this.poolGeo, this.mat.pool, n);
+      for (let i = 0; i < n; i++) { im.getMatrixAt(i, M4); pool.setMatrixAt(i, M4); }
+      pool.computeBoundingSphere(); pool.renderOrder = 3;
+      group.add(im, ig, pool);
     }
     // trolleybus overhead wires & poles on the big avenues (very Bishkek)
     this._trolley(c, group);
@@ -801,6 +812,7 @@ export class World {
   }
 
   setNight(n) {
+    if (this.mat.pool) this.mat.pool.opacity = Math.max(0, n - 0.2) * 0.55;
     if (this.adMat) this.adMat.emissiveIntensity = 0.05 + n * 0.75;
     if (Math.abs((this.night || 0) - n) > 0.02) for (const L of this.live.values()) if (L.signMat) L.signMat.emissiveIntensity = 0.05 + n * 0.9;
     this.night = n;

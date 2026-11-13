@@ -65,7 +65,13 @@
   #miniZoom { position: absolute; left: 150px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; }
   #miniZoom button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,14,20,.75); color: #fff; font-weight: 800; font-size: 16px; padding: 0; }
   .nomini #miniZoom { display: none; }
-  .onfoot #speedo, .onfoot #limit, .onfoot #nitroBox { display: none; }
+  .onfoot #speedo, .onfoot #limit, .onfoot #nitroBox, .onfoot #fuelBox { display: none; }
+  #fuelBox { position: absolute; right: 26px; bottom: 18px; width: 140px; display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  #fuelBox > div { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #fuelBar { height: 100%; background: linear-gradient(90deg, #f2a516, #ffd84a); }
+  #fuelBox.low { animation: wflash .5s infinite alternate; } #fuelBox.low #fuelBar { background: #ff3a3a; }
+  #joy { position: fixed; left: 20px; bottom: 150px; width: 150px; height: 150px; border-radius: 50%; background: rgba(0,0,0,.25); border: 2px solid rgba(255,255,255,.25); pointer-events: auto; }
+  #joyK { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px; border-radius: 50%; background: rgba(255,255,255,.35); }
   #toast { position: absolute; bottom: 196px; left: 50%; transform: translateX(-50%) translateY(10px); max-width: min(560px, 90vw); text-align: center; font-size: 14px; opacity: 0; transition: .35s; }
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #hint { position: absolute; bottom: 236px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0; transition: .2s; }
@@ -289,6 +295,7 @@
   <div id="limit">150</div>
   <canvas id="speedo"></canvas>
   <div id="nitroBox"><div id="nitroBar"></div></div>
+  <div id="fuelBox"><span>⛽</span><div><div id="fuelBar"></div></div></div>
   <div id="radioLbl"></div>
   <div id="drift"></div>
   <div id="raceHud"></div>
@@ -341,7 +348,7 @@
       <div class="page" id="pHelp">
         <div class="keys">
           <div><kbd>W</kbd><kbd>S</kbd> gas / brake · hold S to reverse</div><div><kbd>A</kbd><kbd>D</kbd> steer</div>
-          <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd> nitro (drift to refill)</div><div><kbd>F</kbd> get out / in · steal cars</div><div><kbd>Q</kbd> radio</div><div><kbd>X</kbd><kbd>Z</kbd> gear up / down (manual)</div>
+          <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd> nitro (drift to refill)</div><div><kbd>F</kbd> get out / in · steal cars</div><div><kbd>Q</kbd> radio</div><div><kbd>,</kbd><kbd>.</kbd><kbd>/</kbd> indicators / hazards</div><div><kbd>L</kbd> headlights</div><div><kbd>X</kbd><kbd>Z</kbd> gear up / down (manual)</div>
           <div><kbd>H</kbd> horn</div><div><kbd>C</kbd> camera · <kbd>RMB</kbd> look around</div>
           <div><kbd>J</kbd> jobs</div><div><kbd>M</kbd> map &amp; GPS</div>
           <div><kbd>E</kbd> interact (airport, home)</div><div><kbd>P</kbd> phone · <kbd>B</kbd> pay bail</div><div><kbd>R</kbd> reset car</div>
@@ -396,7 +403,7 @@
 </div>
 
 <div id="touch" class="hidden">
-  <button id="tLeft" style="left:16px;bottom:200px">◀</button><button id="tRight" style="left:98px;bottom:200px">▶</button>
+  <div id="joy"><div id="joyK"></div></div>
   <button id="tGas" style="right:20px;bottom:200px;background:rgba(40,160,80,.45)">▲</button><button id="tBrake" style="right:100px;bottom:200px;background:rgba(200,40,40,.45)">▼</button>
   <button id="tHand" style="right:180px;bottom:200px;font-size:13px">HB</button>
   <button id="tNitro" style="right:20px;bottom:280px;font-size:13px;background:rgba(40,110,255,.45)">N2O</button>

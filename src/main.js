@@ -23,6 +23,8 @@ import { OnFoot } from './onfoot.js';
 import { Radio, STATIONS } from './radio.js';
 import { Life } from './life.js';
 import { Phone } from './phone.js';
+import { City } from './city.js';
+import { Achievements } from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -36,10 +38,10 @@ const CARS = [
   { id: 'coupe', name: 'Sport Coupe', desc: '420 hp. Mind the 150 km/h cameras!', price: 60000 },
 ];
 const PRESETS = {
-  low: { scale: 0.7, view: 900, far: 2500, shadows: false, bloom: false, msaa: false },
-  medium: { scale: 1, view: 1250, far: 4500, shadows: true, bloom: true, msaa: false },
-  high: { scale: 1.25, view: 1600, far: 6500, shadows: true, bloom: true, msaa: true },
-  ultra: { scale: 1.6, view: 2200, far: 9000, shadows: true, bloom: true, msaa: true },
+  low: { scale: 0.7, view: 900, far: 2500, shadows: false, bloom: false, msaa: false, ao: false },
+  medium: { scale: 1, view: 1250, far: 4500, shadows: true, bloom: true, msaa: false, ao: false },
+  high: { scale: 1.25, view: 1600, far: 6500, shadows: true, bloom: true, msaa: true, ao: true },
+  ultra: { scale: 1.6, view: 2200, far: 9000, shadows: true, bloom: true, msaa: true, ao: true },
 };
 const DEFAULTS = {
   preset: 'medium', traffic: 1, peds: 1, sens: 1, abs: true, tcs: true, esc: true, steerAssist: true, manual: false,
@@ -122,6 +124,9 @@ async function boot() {
   peds.addZone({ name: 'Manas Airport', x: airport.dropoff.x + airport.n.x * 18, z: airport.dropoff.y + airport.n.y * -18, r: 45, n: 40, bags: true });
   const jobs = new Jobs(map, game, hud, audio, peds);
   const drift = new Drift(hud, audio, game);
+  const city = new City(scene, map, traffic, game, hud, audio);
+  const ach = new Achievements(game, hud, audio);
+  if (game.savedFuel !== undefined) car.fuel = Math.min(car.tank, game.savedFuel);
   const kalpaks = new Kalpaks(scene, map, game, hud, audio);
   const races = new Races(scene, map, game, hud, audio);
   const weather = new Weather(scene, world, env);
@@ -135,13 +140,14 @@ async function boot() {
   const search = new PlaceSearch(map);
   const fx = new FX(scene);
   const police = new Police(scene, map, world, audio, hud, fx);
-  police.onEscape = (stars) => { const b = 100 * stars; game.money += b; audio.cash(); hud.toast(`+${b} сом escape bonus`, 2); };
+  police.onEscape = (stars) => {
+    ach.add('escapes'); const b = 100 * stars; game.money += b; audio.cash(); hud.toast(`+${b} сом escape bonus`, 2); };
   const net = new Net(scene);
   car.remotes = net;
   const rig = new CameraRig(camera);
   rig.snap(car);
   let post = null;
-  const buildPost = () => { post = (settings.bloom || settings.msaa) ? new PostFX(renderer, env, scene, camera, { bloom: settings.bloom, msaa: settings.msaa }) : null; };
+  const buildPost = () => { post = (settings.bloom || settings.msaa || settings.ao) ? new PostFX(renderer, env, scene, camera, { bloom: settings.bloom, msaa: settings.msaa, ao: settings.ao }) : null; };
   buildPost();
 
   const S = {
@@ -162,7 +168,7 @@ async function boot() {
     saveSettings(settings);
   }
   applySettings();
-  window.__bd = { life, drift, kalpaks, races, weather, foot, radio, fx, police, teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
+  window.__bd = { city, ach, life, drift, kalpaks, races, weather, foot, radio, fx, police, teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
 
   // ---------------------------------------------------------------- vehicles
   function setCar(type, color, isHome) {
@@ -212,6 +218,10 @@ async function boot() {
       case 'KeyG': if (game.routeTarget && !jobs.active) { game.clearRoute(); hud.toast('GPS cleared', 1.2); } break;
       case 'KeyK': hud.toast(audio.toggleMute() ? 'Sound off' : 'Sound on', 1.2); break;
       case 'KeyP': phone.toggle(); break;
+      case 'Comma': car.setIndicator('L'); audio.blip(1500, 0.01, 0.04); break;
+      case 'Period': car.setIndicator('R'); audio.blip(1500, 0.01, 0.04); break;
+      case 'Slash': car.setIndicator('H'); audio.blip(1500, 0.01, 0.04); break;
+      case 'KeyL': car.headMode = car.headMode === 'on' ? 'off' : car.headMode === 'off' ? 'auto' : 'on'; hud.toast('Headlights: ' + car.headMode, 1); break;
       case 'KeyB': if (life.jail) { if (life.payBail(foot)) { audio.cash(); hud.toast('Bail paid – you are free', 2); } else hud.toast('Not enough money for bail', 1.5); } break;
       case 'Equal': case 'NumpadAdd': if (S.mapOpen) hud.zoomMap(1.4); else hud.zoomMini(1.4); break;
       case 'Minus': case 'NumpadSubtract': if (S.mapOpen) hud.zoomMap(1 / 1.4); else hud.zoomMini(1 / 1.4); break;
@@ -257,13 +267,24 @@ async function boot() {
 
   // ---------------------------------------------------------------- phone, messages, MBank, rent, jail
   const phone = new Phone({
-    game, net, life, radio, hud, audio, setCar,
+    game, net, life, radio, hud, audio, setCar, car, ach: null,
+    tow: () => towCar(),
     openMap: () => toggleMap(true),
     openTab: (t) => togglePause(true, t),
     goHome: () => { const A = life.apartment; if (!A) return; if (!game.spend(150, 'Такси домой')) { hud.toast('Нет денег на такси', 1.2); return; } teleport(A.x, A.z); hud.toast('🏠 Дома', 1.5); },
     photo: () => takePhoto(),
   });
   window.__bd.phone = phone;
+  phone.c.ach = ach;
+  function towCar() {
+    let best = null, bd = 1e9;
+    for (const s of city.stations) { const d = Math.hypot(s.rx - car.x, s.rz - car.z); if (d < bd) { bd = d; best = s; } }
+    if (!best) return;
+    if (!game.spend(600, 'Эвакуатор')) { hud.toast('Not enough money for the tow truck', 1.5); return; }
+    if (S.onFoot) { foot.enter(); S.onFoot = false; }
+    teleport(best.rx, best.rz); car.fuel = Math.max(car.fuel, 10);
+    game.msg('Эвакуатор «Бишкек»', `Машина доставлена на АЗС «${best.name}». Залили 10 л. Спасибо!`, '🚛');
+  }
   game.onMessage = (m, quiet) => {
     phone.tick();
     if (quiet) return;
@@ -317,7 +338,7 @@ async function boot() {
       peds.list.push(ped);
       car.setType(CAR_OF[c.type] || 'sedan', c.color); car.place(c.x, c.z, c.h); car.stolen = true;
       if (S.engineSmoke) { fx.removeEmitter(S.engineSmoke); S.engineSmoke = null; }
-      police.crime(1.3, 'Car theft');
+      police.crime(1.3, 'Car theft'); ach.add('thefts');
       audio.horn(0.2, 0.6, 0.9);
       hud.toast('🚗 Car stolen! (your own car is waiting in the Garage)', 2.5);
     }
@@ -336,7 +357,7 @@ async function boot() {
     if (what === 'car' && other && v > 4 && !races.active) game.accident(v, requestPhoto);
     if (what === 'car' && other) {
       if (wreck) {
-        other.emitter = fx.emitter(other, [0, 1.0, other.spec.L * 0.32], true); other.emitter.ai = true;
+        other.emitter = fx.emitter(other, [0, 1.0, other.spec.L * 0.32], true); other.emitter.ai = true; ach.add('wrecks');
         hud.toast('💥 Car wrecked!', 1.5);
         police.crime(1.6, 'You wrecked a car');
       } else if (v > 7) police.crime(1.0, 'Hit-and-run');
@@ -354,6 +375,7 @@ async function boot() {
   game.peds = peds;
   game.onWarn = () => audio.whistle && audio.whistle();
   game.onFine = (f) => {
+    city.cameraFlash(car.x, car.z);
     if (f.heat) police.crime(f.heat, f.kind);
     if (f.kind === 'Speeding' && f.amount >= 500) police.crime(1, 'Extreme speeding');
     else if (f.kind === 'Runway incursion') police.crime(2, 'Runway incursion');
@@ -528,7 +550,7 @@ async function boot() {
       ${rng('scale', 'Resolution', 0.5, 2, 0.05, v => Math.round(v * 100) + '%')}
       ${rng('view', 'Detail distance', 600, 2600, 100, v => v + ' m')}
       ${rng('far', 'City skyline distance', 0, 10000, 500, v => v ? (v / 1000) + ' km' : 'off')}
-      ${tog('shadows', 'Shadows')}${tog('bloom', 'Bloom & colour grading')}${tog('msaa', 'Anti-aliasing')}
+      ${tog('shadows', 'Shadows')}${tog('bloom', 'Bloom & colour grading')}${tog('msaa', 'Anti-aliasing')}${tog('ao', 'Ambient occlusion')}
       ${rng('fov', 'Field of view', 50, 85, 1, v => v + '°')}
       <h4>World</h4>
       ${rng('traffic', 'Traffic density', 0.2, 2, 0.1, v => Math.round(v * 100) + '%')}
@@ -558,10 +580,10 @@ async function boot() {
   }
   function changed(k) {
     if (k === 'preset' && PRESETS[settings.preset]) { Object.assign(settings, PRESETS[settings.preset]); renderSettings(); }
-    else if (['scale', 'view', 'far', 'shadows', 'bloom', 'msaa'].includes(k)) settings.preset = 'custom';
+    else if (['scale', 'view', 'far', 'shadows', 'bloom', 'msaa', 'ao'].includes(k)) settings.preset = 'custom';
     if (['scale', 'preset'].includes(k)) { applyScale(); renderer.setSize(window.innerWidth, window.innerHeight); }
     if (['shadows', 'preset'].includes(k)) { renderer.shadowMap.enabled = settings.shadows; scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); }); }
-    if (['bloom', 'msaa', 'preset', 'scale'].includes(k)) buildPost();
+    if (['bloom', 'msaa', 'ao', 'preset', 'scale'].includes(k)) buildPost();
     if (k === 'mp') { if (settings.mp) net.connect(settings.name || 'Driver'); else net.disconnect(); }
     if (k === 'name' && net.enabled) { net.name = settings.name; }
     applySettings();
@@ -593,6 +615,7 @@ async function boot() {
   // ---------------------------------------------------------------- airport
   function interact() {
     if (S.mode !== 'drive') return;
+    if (!S.onFoot && city.nearestStation(car.x, car.z)) { if (car.speed > 1) { hud.toast('Stop at the pump first', 1.2); return; } city.refuel(car); ach.add('refuels'); return; }
     const dz = Math.hypot(car.x - airport.dropoff.x, car.z - airport.dropoff.y);
     const ds = Math.hypot(car.x - airport.spotter.x, car.z - airport.spotter.y);
     if (dz < 14) {
@@ -626,7 +649,7 @@ async function boot() {
   const fade = (on) => $('fade').classList.toggle('on', on);
   async function startFlight() {
     fade(true); await sleep(700);
-    S.flight = airport.createScenicFlight();
+    S.flight = airport.createScenicFlight(); ach.add('flights');
     S.mode = 'flight'; S.flightCam = 0;
     airport.scenicCamera(S.flight, 0, camTarget, camLook); camera.position.copy(camTarget); lookSm.copy(camLook);
     world.radius = Math.max(settings.view, 2400);
@@ -657,8 +680,12 @@ async function boot() {
   if ('ontouchstart' in window) {
     $('touch').classList.remove('hidden');
     const bind = (id, on, off) => { const el = $(id); el.addEventListener('touchstart', (e) => { e.preventDefault(); audio.start(); on(); }); el.addEventListener('touchend', (e) => { e.preventDefault(); off(); }); };
-    bind('tLeft', () => touch.steer = -1, () => touch.steer = 0);
-    bind('tRight', () => touch.steer = 1, () => touch.steer = 0);
+    // analogue steering joystick
+    const joy = $('joy'), knob = $('joyK');
+    let jid = null, jx = 0;
+    joy.addEventListener('touchstart', (e) => { e.preventDefault(); audio.start(); const t = e.changedTouches[0]; jid = t.identifier; jx = joy.getBoundingClientRect().left + 75; });
+    joy.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === jid) { const dx = Math.max(-60, Math.min(60, t.clientX - jx)); touch.steer = dx / 60; knob.style.transform = `translateX(${dx}px)`; } });
+    joy.addEventListener('touchend', (e) => { e.preventDefault(); touch.steer = 0; knob.style.transform = ''; jid = null; });
     bind('tGas', () => touch.gas = 1, () => touch.gas = 0);
     bind('tBrake', () => touch.brake = 1, () => touch.brake = 0);
     bind('tHand', () => touch.hand = true, () => touch.hand = false);
@@ -770,7 +797,9 @@ async function boot() {
         if (pr && pr.cam) { S.cutCam = pr; }
         if (pr && pr.done) {
           S.mode = 'drive'; document.body.classList.remove('cinemode'); S.cutCam = null;
+          ach.add('busted');
           if ((pr.stars || 0) >= 2) {
+            ach.add('jailed');
             const secs = 25 + pr.stars * 15, bail = 400 + pr.stars * 300;
             S.onFoot = true;
             life.sendToJail(secs, bail, foot, car);
@@ -786,6 +815,20 @@ async function boot() {
         }
       }
       fx.update(dt);
+      city.update(dt, me, car, night);
+      // stats for achievements
+      if (S.mode === 'drive') {
+        if (!S.onFoot) { const km = car.speed * dt / 1000; ach.add('km', km); if (night > 0.5 && settings.realTime) ach.add('nightKm', km); if (weather.cur === 'snow' && weather.amount > 0.5) ach.add('snowKm', km); ach.max('vmax', car.speed * 3.6); }
+        else ach.add('walk', foot.speed * dt);
+        ach.max('drift', drift.best || 0);
+        if (!S.wedSeen) for (const E of city.events) if (E.kind === 'wedding' && Math.hypot(E.x - me.x, E.z - me.z) < 45) { ach.add('wedding'); S.wedSeen = true; }
+        ach.update(dt, { jobs: jobs.completed, total: game.money + game.bank, bank: game.bank, kalpaks: kalpaks.count, places: game.visited.size, rent: game.rent, gold: races.golds || 0 });
+        // fuel warnings
+        const fr = car.fuel / car.tank;
+        if (fr < 0.12 && !S.lowFuel) { S.lowFuel = true; game.msg('Бортовой компьютер', `Мало топлива: ${Math.round(car.fuel)} л. Ближайшие АЗС отмечены ⛽ на карте.`, '⛽'); }
+        if (fr > 0.2) S.lowFuel = false;
+        if (car.fuel <= 0 && !S.noFuel) { S.noFuel = true; hud.toast('⛽ Out of fuel! Phone → Services → tow truck (600 сом)', 4); } else if (car.fuel > 0) S.noFuel = false;
+      }
       kalpaks.update(dt, me.x, me.z);
       weather.update(dt, camera);
       renderer.toneMappingExposure = 0.95 * (weather.exposure ?? 1);
@@ -815,6 +858,7 @@ async function boot() {
         const dzn = Math.hypot(car.x - airport.dropoff.x, car.z - airport.dropoff.y);
         const dsp = Math.hypot(car.x - airport.spotter.x, car.z - airport.spotter.y);
         let hintTxt = dzn < 14 ? '<b>E</b> · Manas Airport' : dsp < 14 ? '<b>E</b> · watch planes land' : '';
+        if (!S.onFoot && city.nearestStation(car.x, car.z)) hintTxt = city.fueling ? '⛽ Filling…' : `<b>E</b> · ⛽ Refuel (${Math.round(car.fuel)}/${car.tank} L)`;
         if (S.onFoot) { const n = foot.nearestCar(car, traffic); hintTxt = n ? (n.own ? '<b>F</b> · get in your car' : '<b>F</b> · steal this car 🚨') : 'Walking · <b>Shift</b> run · <b>Space</b> jump'; }
         if (hintTxt !== S.hintTxt) { S.hintTxt = hintTxt; $('hint').innerHTML = hintTxt; $('hint').classList.toggle('show', !!hintTxt); }
       } else if (S.hintTxt) { S.hintTxt = ''; $('hint').classList.remove('show'); }
@@ -902,9 +946,12 @@ async function boot() {
       if (settings.minimap && frames % 3 === 0) hud.drawMini(S.onFoot ? Object.assign(focusObj, { x: foot.x, z: foot.z, h: foot.camYaw, speed: 0 }) : car, traffic, game, airport, net, (c, s) => {
         c.fillStyle = '#ffc83a';
         for (const kp of kalpaks.near(me.x, me.z, 180)) { c.beginPath(); c.arc(kp.x, kp.z, 7 / s * hud.dpr, 0, 7); c.fill(); }
+        c.fillStyle = '#3fa0ff';
+        for (const st of city.stations) if (Math.abs(st.px - me.x) < 500 && Math.abs(st.pz - me.z) < 500) { const k = 9 / s * hud.dpr; c.fillRect(st.px - k / 2, st.pz - k / 2, k, k); }
         if (races.active) { c.fillStyle = '#ffd23a'; for (const cp of races.active.cps.slice(races.active.i, races.active.i + 3)) { c.beginPath(); c.arc(cp.x, cp.z, 9 / s * hud.dpr, 0, 7); c.fill(); } }
         for (const pc of police.cars) { c.fillStyle = (performance.now() % 500) < 250 ? '#ff3030' : '#3060ff'; c.beginPath(); c.arc(pc.x, pc.z, 7 / s * hud.dpr, 0, 7); c.fill(); }
       });
+      const fb = $('fuelBar'); if (fb) { const fr = car.fuel / car.tank; fb.style.width = Math.round(fr * 100) + '%'; fb.parentElement.classList.toggle('low', fr < 0.15); }
       const nb = $('nitroBar'); if (nb) { nb.style.width = Math.round((car.nitro ?? 1) * 100) + '%'; nb.parentElement.classList.toggle('boost', !!car.boosting); }
       hud.setMoney(game.money);
       hud.setClock(S.hour, settings.mp ? (net.status === 'online' ? net.players.size : null) : null);

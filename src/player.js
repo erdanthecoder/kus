@@ -105,6 +105,16 @@ export class PlayerCar {
       this.spot.position.set(0, 0.8, T.head.z); this.spotTarget.position.set(0, 0, T.head.z + 25);
     }
     this.mass = T.mass; this.power = T.power * 745.7; this.vmax = T.vmax / 3.6;
+    this.tank = { sedan: 60, hatch: 45, suv: 90, coupe: 65, oldsedan: 40, van: 75, bus: 200, truck: 200 }[typeId] || 60;
+    this.diesel = ['van', 'bus', 'truck'].includes(typeId);
+    if (this.fuel === undefined || this.fuel > this.tank) this.fuel = this.tank * 0.7;
+    // indicator lamps (front + rear corners)
+    this.blinkMat = new THREE.MeshBasicMaterial({ color: 0xff9a10, transparent: true, opacity: 0 });
+    this.blinkers = { L: [], R: [] };
+    for (const [side, sx] of [['L', 1], ['R', -1]]) for (const zz of [T.head.z - 0.02, T.tail.z + 0.02]) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffa020 }));
+      b.position.set(sx * (T.W / 2 - 0.08), T.head.y, zz); b.visible = false; this.body.add(b); this.blinkers[side].push(b);
+    }
     this.drag = this.power / Math.pow(this.vmax, 3);
     this.inertia = this.mass * (T.L * T.L + T.W * T.W) / 12 * 1.1;
     this.a = T.wb / 2 + (T.wbOff || 0); this.b = T.wb / 2 - (T.wbOff || 0);
@@ -200,13 +210,16 @@ export class PlayerCar {
     const torqueK = this._gearbox(inp);
     // ---- longitudinal forces
     let Fx = 0;
-    const thr = inp.throttle, brk = inp.brake;
+    const thr = (this.fuel ?? 1) > 0 ? inp.throttle : 0, brk = inp.brake;
     this.braking = false; this.reversing = false;
     const stopped = sp < 0.6;
     if (brk > 0 && stopped) this.stopHold = (this.stopHold || 0) + dt; else if (brk === 0) this.stopHold = 0;
     const wantReverse = brk > 0 && (u < -0.3 || (stopped && this.stopHold > 0.2));
     if (this.nitro === undefined) this.nitro = 1;
-    this.boosting = !!(inp.nitro && this.nitro > 0.01 && thr > 0 && u > 1);
+    // fuel: consumption grows with throttle, nitro and speed (scaled up so a tank lasts a session)
+    const burn = (0.35 + thr * 5.5 + (this.boosting ? 8 : 0)) * (this.diesel ? 0.8 : 1) * (this.mass / 1500) * 0.00012 * Math.max(1, Math.abs(u));
+    if (thr > 0 || Math.abs(u) > 0.5) this.fuel = Math.max(0, (this.fuel ?? this.tank) - burn * dt * 10);
+    this.boosting = !!(inp.nitro && this.nitro > 0.01 && thr > 0 && u > 1 && this.fuel > 0);
     if (this.boosting) { Fx += m * 5.2; this.nitro = Math.max(0, this.nitro - dt * 0.2); }
     else this.nitro = Math.min(1, this.nitro + dt * 0.02);
     if (thr > 0) {
@@ -325,7 +338,13 @@ export class PlayerCar {
     return (0.72 + 0.38 * Math.sin(x * Math.PI)) * health;
   }
 
+  setIndicator(mode) { this.indicator = this.indicator === mode ? null : mode; }
   _visual(dt, inp) {
+    const on = (performance.now() % 760) < 380;
+    if (this.blinkers) for (const s of ['L', 'R']) { const act = this.indicator === s || this.indicator === 'H'; for (const b of this.blinkers[s]) b.visible = act && on; }
+    // auto-cancel the indicator after a completed turn
+    if (this.indicator === 'L' || this.indicator === 'R') { this._turnAcc = (this._turnAcc || 0) + Math.abs(this.r || 0) * dt; if (this._turnAcc > 1.2) { this.indicator = null; this._turnAcc = 0; } } else this._turnAcc = 0;
+    this.blinkOn = !!this.indicator && on;
     if (this.flames) for (const f of this.flames) { f.visible = !!this.boosting; if (f.visible) { const k = 0.8 + Math.random() * 0.5; f.scale.set(1, 1, k); } }
     if (this.flameMat) this.flameMat.color.setHex(Math.random() < 0.5 ? 0x66aaff : 0x99ccff);
     this.rpm += ((this.rpmTarget || 900) + (inp.throttle > 0 && this.speed < 1 ? 2200 * inp.throttle : 0) - this.rpm) * Math.min(1, dt * 6);
@@ -346,8 +365,9 @@ export class PlayerCar {
     }
     this.brakeMat.opacity = this.braking ? 0.75 : (this.night ? 0.12 : 0);
     this.lightMat.emissiveIntensity = this.night ? (this.braking ? 1.6 : 0.8) : (this.braking ? 1.2 : 0.25);
-    this.flareMat.opacity = this.night ? 0.55 : 0;
-    this.spot.intensity = this.night ? 60 : 0;
+    this.lightsOn = this.headMode === 'on' || (this.headMode !== 'off' && this.night);
+    this.flareMat.opacity = this.lightsOn ? 0.55 : 0;
+    this.spot.intensity = this.lightsOn ? 60 : 0;
     // skid marks + smoke
     if ((this.slip > 0.22 && this.speed > 6) || (this.wheelspin > 0.2 && this.speed > 1)) {
       this._addSkid();

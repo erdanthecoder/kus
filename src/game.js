@@ -88,11 +88,11 @@ export class Game {
   _load() {
     try {
       const s = JSON.parse(localStorage.getItem('bishkekDrive') || 'null');
-      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; this.custom = s.custom; this.upgrades = s.upgrades; this.bank = s.bank ?? this.bank; this.tx = s.tx || []; this.messages = s.messages || []; this.rent = s.rent || null; this.rentDay = s.rentDay; this.carRent = s.carRent || null; }
+      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; this.custom = s.custom; this.upgrades = s.upgrades; this.bank = s.bank ?? this.bank; this.tx = s.tx || []; this.messages = s.messages || []; this.rent = s.rent || null; this.rentDay = s.rentDay; this.carRent = s.carRent || null; this.savedFuel = s.fuel; }
     } catch (e) { /* storage unavailable */ }
   }
   save(car) {
-    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades, bank: this.bank, tx: this.tx.slice(-60), messages: this.messages.slice(-80), rent: this.rent, rentDay: this.rentDay, carRent: this.carRent })); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades, bank: this.bank, tx: this.tx.slice(-60), messages: this.messages.slice(-80), rent: this.rent, rentDay: this.rentDay, carRent: this.carRent, fuel: car?.fuel })); } catch (e) { /* ignore */ }
   }
 
   // ---- money: cash (wallet) vs MBank account

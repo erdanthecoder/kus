@@ -3,6 +3,7 @@
 import { fmt } from './game.js';
 import { APARTMENTS } from './life.js';
 import { STATIONS } from './radio.js';
+import { ACH } from './achievements.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -10,7 +11,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 const APPS = [
   ['map', '🗺', 'Map', '#2f7de1'], ['mbank', '🏦', 'MBank', '#11a37f'], ['msg', '💬', 'Messages', '#25c26a'], ['jobs', '💼', 'Jobs', '#f2a516'],
   ['rent', '🏠', 'Rent', '#e85d3a'], ['garage', '🚗', 'Garage', '#6a5acd'], ['radio', '📻', 'Radio', '#d63384'], ['online', '👥', 'Online', '#0aa2c0'],
-  ['camera', '📷', 'Camera', '#555'], ['settings', '⚙', 'Settings', '#6c757d'],
+  ['services', '🛠', 'Services', '#8a6d3b'], ['ach', '🏆', 'Awards', '#c9a227'], ['camera', '📷', 'Camera', '#555'], ['settings', '⚙', 'Settings', '#6c757d'],
 ];
 
 export class Phone {
@@ -111,6 +112,17 @@ export class Phone {
       const R = this.c.radio;
       body.innerHTML = head('Radio') + `<div class="rd">${['Выкл', ...STATIONS.map(s => s.name)].map((n, i) => `<button class="${R.idx === i - 1 ? 'on' : ''}" data-s="${i - 1}">${i ? '📻 ' : '⏹ '}${n}${i ? `<small>${STATIONS[i - 1].genre}</small>` : ''}</button>`).join('')}</div>`;
       body.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { const want = +b.dataset.s; let guard = 8; while (R.idx !== want && guard--) R.next(); $('radioLbl').textContent = R.on ? '📻 ' + R.station.name : ''; this.render(); });
+    } else if (this.app === 'services') {
+      const car = this.c.car;
+      body.innerHTML = head('Services') + `<div class="rt"><b>⛽ Fuel</b><small>${Math.round(car.fuel)} / ${car.tank} L · ${car.diesel ? 'diesel' : 'AI-92'} · drive to any petrol station (⛽ on the map) and press E</small></div>
+        <div class="rt"><b>🚛 Эвакуатор · Tow truck</b><small>Out of fuel or stuck? We bring your car to the nearest petrol station with 10 L.</small><div><span>600 сом</span><button id="svTow">Call</button></div></div>
+        <div class="rt"><b>🚕 Такси домой</b><small>${this.c.life.apartment ? 'Ride to your apartment.' : 'Rent an apartment first.'}</small><div><span>150 сом</span><button id="svHome">Go</button></div></div>
+        <div class="rt"><b>🔧 СТО · Repair</b><small>Damage ${Math.round(car.damage)}% – repair in the Garage or rest at home for free.</small></div>`;
+      $('svTow').onclick = () => { this.close(); this.c.tow(); };
+      $('svHome').onclick = () => { this.c.goHome(); this.close(); };
+    } else if (this.app === 'ach') {
+      const A = this.c.ach;
+      body.innerHTML = head(`Awards ${A.got.size}/${ACH.length}`) + ACH.map(([id, ic, n, d]) => `<div class="rt" style="${A.got.has(id) ? '' : 'opacity:.5'}"><b>${ic} ${n}${A.got.has(id) ? ' ✓' : ''}</b><small>${d}</small></div>`).join('');
     } else if (this.app === 'online') {
       const list = this.c.net.list();
       body.innerHTML = head('Online') + `<p class="ph-muted">${this.c.net.status === 'online' ? `🟢 Подключено · водителей в Бишкеке: ${list.length + 1}` : this.c.net.enabled ? '🟡 Подключение…' : '⚪ Мультиплеер выключен (Настройки)'}</p>` +
