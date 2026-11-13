@@ -25,17 +25,28 @@ export class Phone {
 
   toggle(app) { this.open ? this.close() : this.show(app || null); }
   show(app) {
-    this.open = true; $('phone').classList.add('on'); this.c.audio.blip(980, 0.03, 0.04);
+    this.open = true; $('phone').classList.add('on'); document.body.classList.add('phoneOn'); this.unring(); this.c.audio.blip(980, 0.03, 0.04);
     this.app = app; this.thread = null; this.render();
   }
-  close() { this.open = false; $('phone').classList.remove('on'); this.c.onClose && this.c.onClose(); }
+  close() { this.open = false; $('phone').classList.remove('on'); document.body.classList.remove('phoneOn'); this.c.onClose && this.c.onClose(); }
 
   tick() {
     $('phTime').textContent = this.c.hud.clockText();
     const n = this.unread;
     const b = $('phBadge'); if (b) { b.textContent = n; b.style.display = n ? 'flex' : 'none'; }
+    const pb = $('pkBadge'); if (pb) { pb.textContent = n; pb.style.display = n ? 'flex' : 'none'; }
+    const pt = $('pkTime'); if (pt) pt.textContent = this.c.hud.clockText();
     const ab = document.querySelector('.ph-app[data-a="msg"] .bdg'); if (ab) { ab.textContent = n; ab.style.display = n ? 'flex' : 'none'; }
   }
+
+  // the phone peeking from the bottom of the screen rises and buzzes with each notification
+  ring(m) {
+    if (this.open) return;
+    $('pkNote').innerHTML = `<b>${m.icon || '💬'} ${esc(m.from)}</b>${esc(m.text)}`;
+    const p = $('phPeek'); p.classList.remove('ring'); void p.offsetWidth; p.classList.add('ring');
+    clearTimeout(this._rt); this._rt = setTimeout(() => this.unring(), 5000);
+  }
+  unring() { clearTimeout(this._rt); const p = $('phPeek'); if (p) p.classList.remove('ring'); }
 
   _home() {
     $('phBody').innerHTML = '';
@@ -46,8 +57,10 @@ export class Phone {
     const G = this.c.game;
     if (!this.app) {
       body.innerHTML = `<div class="ph-clock">${this.c.hud.clockText()}</div><div class="ph-date">Бишкек · ${new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div class="ph-wid"><button data-a="mbank">🏦 MBank<b>${fmt(G.bank)} сом</b></button><button data-a="mbank">👛 Wallet<b>${fmt(G.money)} сом</b></button></div>
+        ${(() => { const un = G.messages.filter(m => !m.read).slice(-3).reverse(); return un.length ? `<div class="ph-notes">${un.map(m => `<button data-a="msg"><small>${esc(m.clock || '')}</small><b>${m.icon || '💬'} ${esc(m.from)}</b><br>${esc(m.text.length > 70 ? m.text.slice(0, 70) + '…' : m.text)}</button>`).join('')}</div>` : ''; })()}
         <div class="ph-grid">${APPS.map(([id, ic, nm, col]) => `<button class="ph-app" data-a="${id}"><span style="background:${col}">${ic}</span><small>${nm}</small>${id === 'msg' ? '<i class="bdg"></i>' : ''}</button>`).join('')}</div>`;
-      body.querySelectorAll('.ph-app').forEach(b => b.onclick = () => this.openApp(b.dataset.a));
+      body.querySelectorAll('[data-a]').forEach(b => b.onclick = () => this.openApp(b.dataset.a));
       this.tick();
       return;
     }

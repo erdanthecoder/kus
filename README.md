@@ -17,6 +17,12 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Update: phone always on screen
+- The phone now **peeks up from the bottom of the screen** all the time, showing the clock and an unread badge. Tap it or press **P** to open it.
+- New messages make the phone **rise and buzz** with a preview of the message.
+- The home screen has **MBank and Wallet balance widgets** and your latest notifications.
+- Fixed: on phones the touch buttons were covering the Map/Phone/Menu buttons. Touch controls are re-arranged and no longer overlap.
+
 ## Update: fuel, cameras, live events, awards
 - **Fuel** – every car has a real tank (AI‑92 or diesel). Fill up at 60 real Bishkek petrol stations taken from OpenStreetMap (Gazprom, BP, Shell, Kumtor…): stop under the canopy and press **E**. Prices are per litre and are paid from MBank.
 - **Safe City cameras** – 331 speed cameras at real junctions. They flash and send a fine with a photo to your phone.

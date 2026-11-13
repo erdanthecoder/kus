@@ -289,13 +289,14 @@ async function boot() {
     phone.tick();
     if (quiet) return;
     audio.ping();
-    hud.toast(`${m.icon || '💬'} <b>${esc(m.from)}</b>: ${esc(m.text)}`, 4.5);
+    if (phone.open) { if (phone.app === null) phone.render(); } else phone.ring(m);
     if (phone.open && phone.app === 'msg') phone.render();
   };
   net.onPay = (name, a) => { game.bank += a; game.tx.push({ t: Date.now(), a, l: 'Перевод от ' + name }); game.msg('MBank', `+${fmt(a)} сом – перевод от ${name}. Баланс: ${fmt(game.bank)} сом`, '🏦'); audio.cash(); };
   net.onDM = (name, text) => game.msg('👤 ' + name, text, '👤');
   $('bMap').onclick = () => { audio.start(); if (S.mode !== 'menu') toggleMap(); };
   $('bPhone').onclick = () => { audio.start(); if (S.mode !== 'menu') phone.toggle(); };
+  $('phPeek').onclick = () => { audio.start(); if (S.mode !== 'menu') phone.show(phone.unread ? 'msg' : null); };
   $('bMenu').onclick = () => { audio.start(); if (S.mode !== 'menu') togglePause(); };
   $('minimap').onclick = () => { if (S.mode !== 'menu') toggleMap(true); };
   function takePhoto() {
@@ -603,7 +604,10 @@ async function boot() {
     S.mode = 'drive'; S.paused = false; rig.snap(car);
     if (settings.mp) net.connect(settings.name);
     if (life.apartment) teleport(life.apartment.x, life.apartment.z);
-    if (!game.messages.length) game.msg('Апа (мама)', 'Балам, Бишкекке кош келдиң! Телефонуңду ач (P) – MBank, иш жана квартира бар. Этият айда! ❤️', '❤️');
+    setTimeout(() => {
+      if (!game.messages.some(m => m.from === 'Апа (мама)')) game.msg('Апа (мама)', 'Балам, Бишкекке кош келдиң! This is your phone 📱 – tap it (or press P): MBank, messages, jobs, rent, garage. Этият айда! ❤️', '❤️');
+      else if (phone.unread) phone.ring({ icon: '📱', from: 'Phone', text: phone.unread + ' unread message(s) – tap to read' });
+    }, 2500);
     audio.ignition();
     let seenIntro = false; try { seenIntro = !!localStorage.getItem('bd_intro'); } catch (e) { /* ignore */ }
     if (!seenIntro) { S.paused = true; $('intro').classList.remove('hidden'); }
@@ -692,7 +696,6 @@ async function boot() {
     bind('tNitro', () => touch.nitro = true, () => touch.nitro = false);
     bind('tCam', () => onKey('KeyC'), () => { });
     bind('tAct', () => onKey('KeyE'), () => { });
-    bind('tMenu', () => onKey('Escape'), () => { });
   }
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
