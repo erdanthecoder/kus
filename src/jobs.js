@@ -69,6 +69,7 @@ export class Jobs {
     const J = this.active;
     if (!J) return;
     if (J.ped) this._removePed(J.ped);
+    if ((J.type === 'bus' || J.type === 'marshrutka') && J.earned > 0) this.game.credit(J.earned, `Зарплата: маршрут ${J.num} (неполный)`, true);
     if (J.boarders) J.boarders.forEach(p => this._removePed(p));
     if (J.prevCar && setCar) setCar(J.prevCar.type, J.prevCar.color, true);
     this.active = null;
@@ -222,7 +223,7 @@ export class Jobs {
       const total = Math.max(20, Math.round((base + speedBonus - penalty) * (0.6 + stars * 0.1) / 5) * 5);
       this.game.money += total; this.completed++;
       this.audio.cash();
-      this.hud.toast(`${J.type === 'taxi' ? '🚕' : '📦'} +${total} coins · ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}${J.type === 'taxi' ? ` · ${J.passenger}: "Rahmat!"` : ''}`, 4);
+      this.hud.toast(`${J.type === 'taxi' ? '🚕' : '📦'} +${total} сом · ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}${J.type === 'taxi' ? ` · ${J.passenger}: "Rahmat!"` : ''}`, 4);
       const type = J.type;
       this.active = null; this._hideMarker(); this.game.clearRoute();
       // auto-chain the next order after a short pause
@@ -254,7 +255,7 @@ export class Jobs {
       for (const p of J.boarders) {
         if (p.gone) continue;
         const dx = car.x - p.x, dz = car.z - p.z, dd = Math.hypot(dx, dz);
-        if (dd < 2.8 || J.dt > 7) { p.gone = true; this._removePed(p); J.pax++; this.game.money += J.type === 'bus' ? 15 : 20; J.earned += J.type === 'bus' ? 15 : 20; this.audio.blip(880, 0.03, 0.05); }
+        if (dd < 2.8 || J.dt > 7) { p.gone = true; this._removePed(p); J.pax++; J.earned += J.type === 'bus' ? 15 : 20; this.audio.blip(880, 0.03, 0.05); }
         else { p.x += dx / dd * 1.7 * dt; p.z += dz / dd * 1.7 * dt; p.h = Math.atan2(dx, dz); p.moving = true; p.phase += dt * 8; left++; }
       }
       if (car.speed > 2) { J.stage = 'drive'; this.hud.toast('You left before everyone boarded!', 1.5); }
@@ -262,9 +263,10 @@ export class Jobs {
         J.i++;
         if (J.i >= J.stops.length) {
           const bonus = 150 + J.stops.length * 20;
-          this.game.money += bonus; J.earned += bonus; this.completed++;
+          J.earned += bonus; this.completed++;
+          this.game.credit(J.earned, `Зарплата: маршрут ${J.num}`, true);
           this.audio.cash();
-          this.hud.toast(`🏁 Route ${J.num} complete! ${J.pax} passengers · +${J.earned} coins`, 5);
+          this.hud.toast(`🏁 Route ${J.num} complete! ${J.pax} passengers · +${J.earned} сом`, 5);
           const prev = J.prevCar;
           this.active = null; this._hideMarker(); this.game.clearRoute();
           setCar(prev.type, prev.color, true);

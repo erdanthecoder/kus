@@ -35,7 +35,7 @@ export class Drift {
       const coins = Math.round(this.points / 40);
       this.game.money += coins; this.audio.cash();
       this.best = Math.max(this.best, this.points);
-      this.hud.toast(`🌀 Drift ${Math.round(this.points).toLocaleString()} pts · +${coins} coins`, 2);
+      this.hud.toast(`🌀 Drift ${Math.round(this.points).toLocaleString()} pts · +${coins} сом`, 2);
     }
     this.active = false; this.points = 0; this.mult = 1; this.chain = 0; this.off = 0;
   }
@@ -91,8 +91,8 @@ export class Kalpaks {
           this.got.add(k.id); this.scene.remove(m); this.live.delete(k.id);
           try { localStorage.setItem('bd_kalpaks', JSON.stringify([...this.got])); } catch (e) { /* ignore */ }
           this.game.money += 250; this.audio.chime(); setTimeout(() => this.audio.cash(), 200);
-          this.hud.toast(`🎩 Golden kalpak ${this.got.size}/${this.list.length} · +250 coins`, 2.5);
-          if (this.got.size === this.list.length) { this.game.money += 5000; this.hud.toast('🏆 All golden kalpaks found! +5000 coins', 5); }
+          this.hud.toast(`🎩 Golden kalpak ${this.got.size}/${this.list.length} · +250 сом`, 2.5);
+          if (this.got.size === this.list.length) { this.game.money += 5000; this.hud.toast('🏆 All golden kalpaks found! +5000 сом', 5); }
         }
       }
     }
@@ -247,8 +247,8 @@ export class Races {
     const best = this.best[A.R.id];
     const nb = !best || t < best;
     if (nb) { this.best[A.R.id] = t; try { localStorage.setItem('bd_race_best', JSON.stringify(this.best)); } catch (e) { /* ignore */ } }
-    this.game.money += prize; this.audio.cash();
-    this.hud.toast(`🏁 ${A.R.name}: ${fmtT(t)} · ${medal} · +${prize} coins${nb ? ' · NEW RECORD!' : ''}`, 6);
+    this.game.credit(prize, 'Приз: ' + A.R.name, true); this.audio.cash();
+    this.hud.toast(`🏁 ${A.R.name}: ${fmtT(t)} · ${medal} · +${prize} сом${nb ? ' · NEW RECORD!' : ''}`, 6);
     this.stop();
     return { done: true };
   }

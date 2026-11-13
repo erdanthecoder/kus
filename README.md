@@ -17,6 +17,18 @@ python3 -m http.server 8080
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
 
+## Update: phone, MBank, jail, rent, real-time
+
+- **Buttons on screen:** 🗺 Map, 📱 Phone, ☰ Menu (top right). Tapping the minimap also opens the map.
+- **Phone (P):** MBank, Messages, Map, Jobs, Rent, Garage, Radio, Online, Camera (saves a photo), Settings.
+- **Wallet + MBank:** cash in your pocket (taxi/courier fares, drift bonuses) plus a bank account (salary, race prizes). Fines, rent and purchases are paid by card. Withdraw cash (1% fee), deposit, **send money to online players**, see your transaction history.
+- **Messages:** your mum, the taxi dispatcher, friends, the landlady, MBank notifications, "Safe City" fine notices and the police all text you. You can **chat privately with real online players**.
+- **Jail:** busted with 2+ wanted stars means detention in the ИВС yard next to the Sverdlovsky district police department (walls, barbed wire, watchtower). Wait out the timer or press **B** to pay bail.
+- **Rent:** daily-rent apartments from a hostel bed at Osh Bazaar up to a penthouse in Bishkek City. Your home becomes your spawn point; press E there to rest, which repairs the car and saves your progress. Rent is charged every Bishkek day. You can also rent a car until midnight.
+- **Real-time sync:** the clock follows **real Bishkek time (UTC+6)**, and the live weather is the same for every player (snow only in the real winter months).
+- **New sound:** an engine built from firing pulses (4-cylinder, V8 or diesel depending on the car), exhaust rumble and drive, turbo whine, blow-off and exhaust pops, gear-change dips, ignition crank, realistic tyre squeal, rain, birds by day, crickets at night, and a real-sounding horn.
+- **Using your phone while driving** gets a fine too.
+
 ## Update: rules, places, Bishkek look
 
 - **Every way of driving wrong is now punished.** A flashing warning and a police whistle come first, then a camera fine with a photo, and the police get involved if you keep going:

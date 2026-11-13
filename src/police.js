@@ -260,7 +260,7 @@ export class Police {
     U.arms[0].rotation.x = -sw * 0.45; U.arms[1].rotation.x = t > 4.6 ? -1.4 - Math.sin(t * 3) * 0.1 : sw * 0.45; // raises hand at the window
     // subtitles
     const sub = document.getElementById('cineSub');
-    const lines = [[1.6, ''], [4.6, '👮 «Здравствуйте! Патрульная милиция. Документы, пожалуйста.»'], [6.6, '👮 «Превышение скорости, ДТП, неподчинение… Оформляем.»'], [8.6, `Fine: −${C.fine} coins · ${'★'.repeat(C.stars)} cleared`]];
+    const lines = [[1.6, ''], [4.6, '👮 «Здравствуйте! Патрульная милиция. Документы, пожалуйста.»'], [6.6, '👮 «Превышение скорости, ДТП, неподчинение… Оформляем.»'], [8.6, `Fine: −${C.fine} сом · ${'★'.repeat(C.stars)} cleared`]];
     let txt = ''; for (const [tt, s] of lines) if (t > tt) txt = s;
     if (sub.textContent !== txt) sub.textContent = txt;
     document.getElementById('busted').classList.toggle('show', t > 7.6);
@@ -284,7 +284,7 @@ export class Police {
       const fine = C.fine;
       this.cutscene = null;
       this.clear();
-      return { done: true, fine, cam, look };
+      return { done: true, fine, cam, look, stars: C.stars };
     }
     return { cam, look };
   }

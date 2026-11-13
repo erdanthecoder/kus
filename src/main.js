@@ -21,6 +21,8 @@ import { PlaceSearch } from './search.js';
 import { Drift, Kalpaks, Races, RACES, Weather, fmtT } from './fun.js';
 import { OnFoot } from './onfoot.js';
 import { Radio, STATIONS } from './radio.js';
+import { Life } from './life.js';
+import { Phone } from './phone.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -41,7 +43,7 @@ const PRESETS = {
 };
 const DEFAULTS = {
   preset: 'medium', traffic: 1, peds: 1, sens: 1, abs: true, tcs: true, esc: true, steerAssist: true, manual: false,
-  fov: 62, vol: 0.7, minimap: true, autoRes: true, showFps: false, weather: 'auto', timeSpeed: 1, mp: true, name: '', shake: true, ...PRESETS.medium,
+  fov: 62, vol: 0.7, minimap: true, autoRes: true, showFps: false, weather: 'auto', realTime: true, timeSpeed: 1, mp: true, name: '', shake: true, ...PRESETS.medium,
 };
 
 function loadSettings() {
@@ -125,13 +127,15 @@ async function boot() {
   const weather = new Weather(scene, world, env);
   const foot = new OnFoot(scene, world, map);
   const radio = new Radio(audio);
+  const life = new Life(game, map, world, scene, hud, audio);
+  if (game.rent) life._marker();
   if (settings.weather && settings.weather !== 'auto') weather.set(settings.weather);
   if (game.custom) { car.custom = { ...game.custom }; car._applyCustom(); if (game.custom.plate) car.setPlate(game.custom.plate); }
   jobs.completed = game.jobsDone || 0;
   const search = new PlaceSearch(map);
   const fx = new FX(scene);
   const police = new Police(scene, map, world, audio, hud, fx);
-  police.onEscape = (stars) => { const b = 100 * stars; game.money += b; audio.cash(); hud.toast(`+${b} coins escape bonus`, 2); };
+  police.onEscape = (stars) => { const b = 100 * stars; game.money += b; audio.cash(); hud.toast(`+${b} сом escape bonus`, 2); };
   const net = new Net(scene);
   car.remotes = net;
   const rig = new CameraRig(camera);
@@ -158,7 +162,7 @@ async function boot() {
     saveSettings(settings);
   }
   applySettings();
-  window.__bd = { drift, kalpaks, races, weather, foot, radio, fx, police, teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
+  window.__bd = { life, drift, kalpaks, races, weather, foot, radio, fx, police, teleport: (...a) => teleport(...a), rig, map, world, car, traffic, peds, airport, game, jobs, net, S, scene, camera, renderer, env, settings };
 
   // ---------------------------------------------------------------- vehicles
   function setCar(type, color, isHome) {
@@ -207,10 +211,12 @@ async function boot() {
       case 'KeyR': resetCar(); break;
       case 'KeyG': if (game.routeTarget && !jobs.active) { game.clearRoute(); hud.toast('GPS cleared', 1.2); } break;
       case 'KeyK': hud.toast(audio.toggleMute() ? 'Sound off' : 'Sound on', 1.2); break;
+      case 'KeyP': phone.toggle(); break;
+      case 'KeyB': if (life.jail) { if (life.payBail(foot)) { audio.cash(); hud.toast('Bail paid – you are free', 2); } else hud.toast('Not enough money for bail', 1.5); } break;
       case 'Equal': case 'NumpadAdd': if (S.mapOpen) hud.zoomMap(1.4); else hud.zoomMini(1.4); break;
       case 'Minus': case 'NumpadSubtract': if (S.mapOpen) hud.zoomMap(1 / 1.4); else hud.zoomMini(1 / 1.4); break;
-      case 'BracketRight': S.hour = (S.hour + 1) % 24; hud.toast(hud.clockText(), 0.8); break;
-      case 'BracketLeft': S.hour = (S.hour + 23) % 24; hud.toast(hud.clockText(), 0.8); break;
+      case 'BracketRight': settings.realTime = false; S.hour = (S.hour + 1) % 24; hud.toast(hud.clockText(), 0.8); break;
+      case 'BracketLeft': settings.realTime = false; S.hour = (S.hour + 23) % 24; hud.toast(hud.clockText(), 0.8); break;
       case 'KeyX': if (settings.manual) car.shiftUp(); break;
       case 'KeyZ': if (settings.manual) car.shiftDown(); break;
       case 'KeyF': toggleFoot(); break;
@@ -249,10 +255,51 @@ async function boot() {
     for (let i = 0; i < 6; i++) world.update({ x: car.x, z: car.z }, 0, true);
   }
 
+  // ---------------------------------------------------------------- phone, messages, MBank, rent, jail
+  const phone = new Phone({
+    game, net, life, radio, hud, audio, setCar,
+    openMap: () => toggleMap(true),
+    openTab: (t) => togglePause(true, t),
+    goHome: () => { const A = life.apartment; if (!A) return; if (!game.spend(150, 'Такси домой')) { hud.toast('Нет денег на такси', 1.2); return; } teleport(A.x, A.z); hud.toast('🏠 Дома', 1.5); },
+    photo: () => takePhoto(),
+  });
+  window.__bd.phone = phone;
+  game.onMessage = (m, quiet) => {
+    phone.tick();
+    if (quiet) return;
+    audio.ping();
+    hud.toast(`${m.icon || '💬'} <b>${esc(m.from)}</b>: ${esc(m.text)}`, 4.5);
+    if (phone.open && phone.app === 'msg') phone.render();
+  };
+  net.onPay = (name, a) => { game.bank += a; game.tx.push({ t: Date.now(), a, l: 'Перевод от ' + name }); game.msg('MBank', `+${fmt(a)} сом – перевод от ${name}. Баланс: ${fmt(game.bank)} сом`, '🏦'); audio.cash(); };
+  net.onDM = (name, text) => game.msg('👤 ' + name, text, '👤');
+  $('bMap').onclick = () => { audio.start(); if (S.mode !== 'menu') toggleMap(); };
+  $('bPhone').onclick = () => { audio.start(); if (S.mode !== 'menu') phone.toggle(); };
+  $('bMenu').onclick = () => { audio.start(); if (S.mode !== 'menu') togglePause(); };
+  $('minimap').onclick = () => { if (S.mode !== 'menu') toggleMap(true); };
+  function takePhoto() {
+    $('hudRoot').classList.add('off');
+    setTimeout(() => {
+      S.photoCbs.push(() => {
+        const a = document.createElement('a'); a.download = `bishkek-${Date.now()}.png`; a.href = renderer.domElement.toDataURL('image/png'); a.click();
+        $('hudRoot').classList.toggle('off', !S.hud); audio.fine(); hud.toast('📷 Photo saved', 1.5);
+      });
+    }, 120);
+  }
+  function bishkekHour() { const d = new Date(); return ((d.getUTCHours() + 6) % 24) + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600; }
+  function syncedWeather() {
+    const slot = Math.floor(Date.now() / (20 * 60 * 1000));
+    const r = Math.abs(Math.sin(slot * 12.9898) * 43758.5453) % 1;
+    const month = new Date(Date.now() + 6 * 3600e3).getUTCMonth();
+    const winter = month >= 10 || month <= 2;
+    return r < 0.62 ? 'clear' : (winter && r > 0.8 ? 'snow' : 'rain');
+  }
+
   // ---------------------------------------------------------------- on foot / car theft
   const CAR_OF = { trolley: 'bus', taxi: 'sedan', sedan: 'sedan', hatch: 'hatch', suv: 'suv', oldsedan: 'oldsedan', van: 'van', bus: 'bus', truck: 'truck' };
   function toggleFoot() {
     if (S.mode !== 'drive' || races.active) return;
+    if (life.jail) { hud.toast('You are in jail', 1); return; }
     if (!S.onFoot) {
       if (car.speed > 3) { hud.toast('Slow down to get out', 1); return; }
       if (jobs.active && (jobs.active.type === 'bus' || jobs.active.type === 'marshrutka')) { hud.toast('Finish your route first', 1.2); return; }
@@ -274,7 +321,7 @@ async function boot() {
       audio.horn(0.2, 0.6, 0.9);
       hud.toast('🚗 Car stolen! (your own car is waiting in the Garage)', 2.5);
     }
-    foot.enter(); S.onFoot = false; rig.snap(car); audio.blip(420, 0.05, 0.08);
+    foot.enter(); S.onFoot = false; rig.snap(car); audio.ignition();
   }
 
   // ---------------------------------------------------------------- crashes, damage, police
@@ -402,7 +449,7 @@ async function boot() {
       if (jobs.active?.type === b.dataset.id) { jobs.stop(car, setCar); return; }
       jobs.start(b.dataset.id, car, scene, setCar);
     });
-    $('raceCards').innerHTML = RACES.map(R => `<button class="card" data-r="${R.id}"><div class="ic">🏁</div><b>${R.name}</b><small>${R.desc}</small><div class="price">${races.best[R.id] ? '🏆 Best ' + fmtT(races.best[R.id]) : 'Prize up to 1 500 coins'}</div></button>`).join('');
+    $('raceCards').innerHTML = RACES.map(R => `<button class="card" data-r="${R.id}"><div class="ic">🏁</div><b>${R.name}</b><small>${R.desc}</small><div class="price">${races.best[R.id] ? '🏆 Best ' + fmtT(races.best[R.id]) : 'Prize up to 1 500 сом'}</div></button>`).join('');
     $('raceCards').querySelectorAll('button').forEach(b => b.onclick = () => {
       if (S.mode !== 'drive') return;
       if (S.onFoot) { foot.enter(); S.onFoot = false; }
@@ -411,8 +458,8 @@ async function boot() {
       if (!races.start(RACES.find(r => r.id === b.dataset.r), car, teleport)) hud.toast('Could not build the race route', 1.5);
       else { rig.snap(car); hud.toast('Beat the gold & silver rivals! Speed cameras are off on the race route.', 3); }
     });
-    $('kalpakTxt').textContent = `🎩 Golden kalpaks found: ${kalpaks.count}/${kalpaks.list.length} – hidden all over Bishkek (+250 coins each)`;
-    $('jobNow').innerHTML = jobs.active ? `On shift: <b>${jobs.status(car)}</b> · <a href="#" id="endShift" style="color:#3fc8ff">end shift</a>` : `${jobs.completed} jobs done · balance <b>${fmt(game.money)} coins</b>`;
+    $('kalpakTxt').textContent = `🎩 Golden kalpaks found: ${kalpaks.count}/${kalpaks.list.length} – hidden all over Bishkek (+250 сом each)`;
+    $('jobNow').innerHTML = jobs.active ? `On shift: <b>${jobs.status(car)}</b> · <a href="#" id="endShift" style="color:#3fc8ff">end shift</a>` : `${jobs.completed} jobs done · cash <b>${fmt(game.money)} сом</b> · bank <b>${fmt(game.bank)} сом</b>`;
     const es = $('endShift'); if (es) es.onclick = (e) => { e.preventDefault(); jobs.stop(car, setCar); renderJobs(); };
   }
   function renderGarage() {
@@ -424,26 +471,26 @@ async function boot() {
       const c = CARS.find(q => q.id === b.dataset.id);
       if (jobs.active && (jobs.active.type === 'bus' || jobs.active.type === 'marshrutka')) { hud.toast('Finish your route first', 1.5); return; }
       if (!game.owned.includes(c.id)) {
-        if (game.money < c.price) { hud.toast(`Not enough coins (${fmt(c.price)} needed)`, 1.6); return; }
-        game.money -= c.price; game.owned.push(c.id); audio.cash();
+        if (!game.spend(c.price, 'Автосалон: ' + c.name)) { hud.toast(`Not enough money (${fmt(c.price)} сом needed)`, 1.6); return; }
+        game.owned.push(c.id); audio.cash();
       }
       setCar(c.id, car.color, true); game.save(car); renderGarage();
     });
     const cost = Math.round(car.damage * 3 + car.dents * 5);
-    $('dmgTxt').textContent = car.damage > 1 || car.dents ? `Damage ${Math.round(car.damage)}% · ${cost} coins` : 'Your car is in perfect shape';
+    $('dmgTxt').textContent = car.damage > 1 || car.dents ? `Damage ${Math.round(car.damage)}% · ${cost} сом` : 'Your car is in perfect shape';
     $('repairBtn').onclick = () => {
       if (!(car.damage > 1 || car.dents)) return;
-      if (game.money < cost) { hud.toast('Not enough coins', 1.2); return; }
-      game.money -= cost; car.repair(); updateEngineSmoke(); audio.cash(); renderGarage();
+      if (!game.spend(cost, 'СТО: ремонт')) { hud.toast('Not enough money', 1.2); return; }
+      car.repair(); updateEngineSmoke(); audio.cash(); renderGarage();
     };
     const C = car.custom || (car.custom = {});
     const NEON = [[null, 'Off'], [0x2080ff, 'Blue'], [0xff2060, 'Pink'], [0x30ff80, 'Green'], [0xffa020, 'Orange'], [0xb040ff, 'Purple'], [0xffffff, 'White']];
     const RIMS = [[null, 'Chrome'], [0x222222, 'Black'], [0xd4a020, 'Gold'], [0xd02020, 'Red'], [0x2a60d0, 'Blue']];
     const owned = game.upgrades || (game.upgrades = {});
-    const buy = (key, price, apply) => { if (!owned[key]) { if (game.money < price) { hud.toast(`Need ${price} coins`, 1.2); return; } game.money -= price; owned[key] = true; audio.cash(); } apply(); car._applyCustom(); game.custom = { ...C }; game.save(car); renderGarage(); };
-    $('custom').innerHTML = `<h4>Neon underglow ${owned.neon ? '' : '· 1 500 coins'}</h4><div class="sws">${NEON.map(([c, n]) => `<button class="btn ${C.neon === c ? 'pri' : ''}" data-neon="${c}">${n}</button>`).join(' ')}</div>
-      <h4>Rims ${owned.rims ? '' : '· 600 coins'}</h4><div class="sws">${RIMS.map(([c, n]) => `<button class="btn ${(C.rims ?? null) === c ? 'pri' : ''}" data-rims="${c}">${n}</button>`).join(' ')}</div>
-      <h4>Rear spoiler ${owned.spoiler ? '' : '· 1 000 coins'}</h4><button class="btn ${C.spoiler ? 'pri' : ''}" id="spBtn">${C.spoiler ? 'Remove spoiler' : 'Add spoiler'}</button>
+    const buy = (key, price, apply) => { if (!owned[key]) { if (!game.spend(price, 'Тюнинг')) { hud.toast(`Need ${price} сом`, 1.2); return; } owned[key] = true; audio.cash(); } apply(); car._applyCustom(); game.custom = { ...C }; game.save(car); renderGarage(); };
+    $('custom').innerHTML = `<h4>Neon underglow ${owned.neon ? '' : '· 1 500 сом'}</h4><div class="sws">${NEON.map(([c, n]) => `<button class="btn ${C.neon === c ? 'pri' : ''}" data-neon="${c}">${n}</button>`).join(' ')}</div>
+      <h4>Rims ${owned.rims ? '' : '· 600 сом'}</h4><div class="sws">${RIMS.map(([c, n]) => `<button class="btn ${(C.rims ?? null) === c ? 'pri' : ''}" data-rims="${c}">${n}</button>`).join(' ')}</div>
+      <h4>Rear spoiler ${owned.spoiler ? '' : '· 1 000 сом'}</h4><button class="btn ${C.spoiler ? 'pri' : ''}" id="spBtn">${C.spoiler ? 'Remove spoiler' : 'Add spoiler'}</button>
       <h4>Number plate</h4><input type="text" id="plateIn" maxlength="12" value="${esc(car.plateText || '')}" style="background:#1b2430;color:#fff;border:1px solid #2c3a4a;border-radius:8px;padding:8px;text-transform:uppercase">`;
     $('custom').querySelectorAll('[data-neon]').forEach(b => b.onclick = () => buy('neon', 1500, () => { C.neon = b.dataset.neon === 'null' ? null : +b.dataset.neon; }));
     $('custom').querySelectorAll('[data-rims]').forEach(b => b.onclick = () => buy('rims', 600, () => { C.rims = b.dataset.rims === 'null' ? null : +b.dataset.rims; }));
@@ -454,9 +501,9 @@ async function boot() {
   }
   function renderOnline() {
     $('netStatus').innerHTML = !settings.mp ? 'Multiplayer is off (Settings → Online).' : net.status === 'online' ? `<span class="dot on"></span> Connected · ${net.players.size + 1} drivers in Bishkek right now` : `Connecting… (${net.status})`;
-    const rows = [{ name: net.name || settings.name || 'You', money: game.money, job: jobs.active ? JOBS[jobs.active.type].icon : '', car: car.type, me: true }].concat(net.list());
+    const rows = [{ name: net.name || settings.name || 'You', money: game.money + game.bank, job: jobs.active ? JOBS[jobs.active.type].icon : '', car: car.type, me: true }].concat(net.list());
     rows.sort((a, b) => b.money - a.money);
-    $('lb').innerHTML = '<tr><th>#</th><th>Driver</th><th>Coins</th><th>Now</th></tr>' + rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td>${fmt(r.money)}</td><td>${r.job || (CARS.find(c => c.id === r.car)?.name || '')}</td></tr>`).join('');
+    $('lb').innerHTML = '<tr><th>#</th><th>Driver</th><th>Сом</th><th>Now</th></tr>' + rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td>${fmt(r.money)}</td><td>${r.job || (CARS.find(c => c.id === r.car)?.name || '')}</td></tr>`).join('');
   }
   function showOnline(on) {
     S.tabOnline = on;
@@ -486,8 +533,9 @@ async function boot() {
       <h4>World</h4>
       ${rng('traffic', 'Traffic density', 0.2, 2, 0.1, v => Math.round(v * 100) + '%')}
       ${rng('peds', 'Pedestrians', 0, 2, 0.1, v => Math.round(v * 100) + '%')}
+      ${tog('realTime', 'Real Bishkek time (synced)')}
       ${rng('timeSpeed', 'Day speed', 0, 6, 0.5, v => v ? v + '×' : 'paused')}
-      ${sel('weather', 'Weather', [['auto', 'Changing'], ['clear', 'Clear'], ['rain', 'Rain'], ['snow', 'Snow (winter)']])}
+      ${sel('weather', 'Weather', [['auto', 'Live (same for everyone)'], ['clear', 'Clear'], ['rain', 'Rain'], ['snow', 'Snow (winter)']])}
     </div><div>
       <h4>Driving</h4>
       ${rng('sens', 'Steering sensitivity', 0.4, 1.6, 0.05, v => Math.round(v * 100) + '%')}
@@ -506,7 +554,7 @@ async function boot() {
     box.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { const k = r.dataset.k; settings[k] = +r.value; const v = $('v_' + k); if (v) v.textContent = r.parentElement.querySelector('small').textContent = (k === 'view' ? r.value + ' m' : k === 'far' ? (+r.value ? r.value / 1000 + ' km' : 'off') : k === 'fov' ? r.value + '°' : k === 'timeSpeed' ? (+r.value ? r.value + '×' : 'paused') : Math.round(r.value * 100) + '%'); changed(k); });
     box.querySelectorAll('select').forEach(s => s.onchange = () => { const k = s.dataset.k; settings[k] = k === 'manual' ? s.value === 'true' : s.value; changed(k); if (k === 'weather' && s.value !== 'auto') weather.set(s.value); });
     box.querySelector('input[type=text]').onchange = (e) => { settings.name = e.target.value.trim().slice(0, 18) || 'Driver'; changed('name'); };
-    $('resetProg').onclick = () => { if (confirm('Reset coins, cars and landmarks?')) { localStorage.removeItem('bishkekDrive'); location.reload(); } };
+    $('resetProg').onclick = () => { if (confirm('Reset money, cars and landmarks?')) { localStorage.removeItem('bishkekDrive'); location.reload(); } };
   }
   function changed(k) {
     if (k === 'preset' && PRESETS[settings.preset]) { Object.assign(settings, PRESETS[settings.preset]); renderSettings(); }
@@ -532,6 +580,9 @@ async function boot() {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     S.mode = 'drive'; S.paused = false; rig.snap(car);
     if (settings.mp) net.connect(settings.name);
+    if (life.apartment) teleport(life.apartment.x, life.apartment.z);
+    if (!game.messages.length) game.msg('Апа (мама)', 'Балам, Бишкекке кош келдиң! Телефонуңду ач (P) – MBank, иш жана квартира бар. Этият айда! ❤️', '❤️');
+    audio.ignition();
     let seenIntro = false; try { seenIntro = !!localStorage.getItem('bd_intro'); } catch (e) { /* ignore */ }
     if (!seenIntro) { S.paused = true; $('intro').classList.remove('hidden'); }
     else hud.toast(`Salam, <b>${esc(settings.name)}</b>! <b>J</b> jobs · <b>M</b> map · <b>Esc</b> menu`, 4);
@@ -549,10 +600,15 @@ async function boot() {
       hud.renderBoard(airport.board, $('fids'));
       $('airportMenu').classList.remove('hidden'); audio.pa();
     } else if (ds < 14) startSpot();
+    else if (life.apartment && Math.hypot(me0().x - life.apartment.x, me0().z - life.apartment.z) < 12) {
+      car.repair(); updateEngineSmoke(); game.save(car); audio.chime();
+      if (!settings.realTime) S.hour = 8;
+      hud.toast('🏠 You rested at home. Car fixed, progress saved.', 2.5);
+    }
   }
   $('apFlight').onclick = () => {
-    if (game.money < 500) { hud.toast('Not enough coins for a ticket (500)', 1.6); return; }
-    game.money -= 500; audio.cash();
+    if (!game.spend(500, 'Авиабилет FRU')) { hud.toast('Not enough money for a ticket (500 сом)', 1.6); return; }
+    audio.cash();
     $('airportMenu').classList.add('hidden'); startFlight();
   };
   $('apSpot').onclick = () => { $('airportMenu').classList.add('hidden'); startSpot(); };
@@ -661,7 +717,7 @@ async function boot() {
     const simDt = running ? dt : 0;
     S.time += simDt;
     U.uTime.value += dt;
-    S.hour = (S.hour + simDt / 60 * settings.timeSpeed) % 24;
+    S.hour = settings.realTime && S.mode !== 'free' ? bishkekHour() : (S.hour + simDt / 60 * settings.timeSpeed) % 24;
     env.setHour(S.hour);
     const h = S.hour;
     traffic.rush = (h > 7.5 && h < 10) || (h > 17 && h < 20) ? 1.65 : (h > 23 || h < 6) ? 0.45 : 1;
@@ -714,17 +770,33 @@ async function boot() {
         if (pr && pr.cam) { S.cutCam = pr; }
         if (pr && pr.done) {
           S.mode = 'drive'; document.body.classList.remove('cinemode'); S.cutCam = null;
-          game.money -= pr.fine;
-          game.fines.push({ kind: 'Arrest', amount: pr.fine, detail: 'Caught by the patrol police', time: hud.clockText() });
-          rig.snap(car); game.save(car);
-          hud.toast(`Released after paying ${pr.fine} coins`, 3);
+          if ((pr.stars || 0) >= 2) {
+            const secs = 25 + pr.stars * 15, bail = 400 + pr.stars * 300;
+            S.onFoot = true;
+            life.sendToJail(secs, bail, foot, car);
+            game.fines.push({ kind: 'Arrest', amount: 0, detail: `Detained for ${secs} s`, time: hud.clockText() });
+            hud.toast(`🔒 Detained! ${secs} s in the ИВС – or press B to pay ${fmt(bail)} сом bail`, 4);
+          } else {
+            game.charge(pr.fine, 'Штраф: задержание');
+            game.fines.push({ kind: 'Arrest', amount: pr.fine, detail: 'Caught by the patrol police', time: hud.clockText() });
+            game.msg('Патрульная милиция', `Протокол составлен. Штраф ${fmt(pr.fine)} сом списан с MBank.`, '👮');
+            rig.snap(car);
+          }
+          game.save(car);
         }
       }
       fx.update(dt);
       kalpaks.update(dt, me.x, me.z);
       weather.update(dt, camera);
       renderer.toneMappingExposure = 0.95 * (weather.exposure ?? 1);
-      if (settings.weather === 'auto') { S.wT = (S.wT ?? 300) - dt; if (S.wT <= 0) { S.wT = 300 + Math.random() * 400; const r = Math.random(); weather.set(r < 0.6 ? 'clear' : r < 0.85 ? 'rain' : 'snow'); } }
+      if (settings.weather === 'auto') { S.wT = (S.wT ?? 0) - dt; if (S.wT <= 0) { S.wT = 10; weather.set(syncedWeather()); } }
+      S.dayT = (S.dayT ?? 0) - dt; if (S.dayT <= 0) { S.dayT = 10; life.dailyTick(setCar, car); }
+      if (S.mode === 'drive') life.npcMessages(dt, { night: night > 0.5, wanted: police.wanted });
+      const jr = life.updateJail(dt, foot, night);
+      if (jr && jr.released) { S.onFoot = true; foot.char.visible = true; hud.toast('🔓 Released from jail', 2.5); }
+      const jb = $('jailBox');
+      if (life.jail) { jb.classList.add('show'); jb.innerHTML = `🔒 ИВС · IN JAIL<b>${Math.ceil(life.jail.t)} s</b><small>Press <kbd>B</kbd> to pay ${fmt(life.jail.bail)} сом bail</small>`; } else jb.classList.remove('show');
+      if (phone.open && !S.onFoot && car.speed * 3.6 > 20 && S.mode === 'drive') { S.phT = (S.phT || 0) + dt; if (S.phT > 0.5) info.warn = info.warn || 'PHONE WHILE DRIVING!'; if (S.phT > 3) { S.phT = -8; requestPhoto((ph) => game.issueFine('Phone while driving', 100, 'Used a mobile phone while driving', ph, 0.3)); } } else if ((S.phT || 0) > 0) S.phT = 0;
       if (frames % 60 === 0) for (const e of [...fx.emitters]) if (e.ai && !traffic.cars.includes(e.obj)) fx.removeEmitter(e);
       if (S.mode === 'drive') {
         const nm = info.road ? map.roadName(info.road.e.name) : null;
@@ -759,7 +831,7 @@ async function boot() {
       S.lastSave += dt;
       if (S.lastSave > 10) { S.lastSave = 0; game.save(car); }
     }
-    net.update(dt, car, { money: game.money, job: jobs.active ? JOBS[jobs.active.type].icon : '', jobs: jobs.completed }, night);
+    net.update(dt, car, { money: game.money + game.bank, job: jobs.active ? JOBS[jobs.active.type].icon : '', jobs: jobs.completed }, night);
 
     // ---- camera
     if (S.mode === 'flight' && S.flight) {
@@ -806,7 +878,7 @@ async function boot() {
     if (post) post.setNight(lit.night);
     if (S.mode !== 'flight') { scene.fog.near = 450; scene.fog.far = Math.max(world.radius + 700, (settings.far || 0) * 1.15); }
     const jet = airport.noiseAt(camera.position.x, camera.position.z, camera.position.y);
-    audio.update(dt, car, { throttle: input.throttle, inFlight: S.mode === 'flight', cityLevel: Math.min(1, traffic.cars.length / 200) * (Math.abs(car.z) < 6000 ? 1 : 0.2), jet: S.mode === 'flight' ? 0.35 : jet });
+    audio.update(dt, car, { carType: car.type, onFoot: S.onFoot, night, rain: weather.cur === 'rain' ? weather.amount : 0, throttle: input.throttle, inFlight: S.mode === 'flight', cityLevel: Math.min(1, traffic.cars.length / 200) * (Math.abs(car.z) < 6000 ? 1 : 0.2), jet: S.mode === 'flight' ? 0.35 : jet });
 
     // ---- render (shadow map refreshed every other frame – halves shadow cost)
     if (settings.shadows && (frames % 2 === 0 || car.speed > 25)) renderer.shadowMap.needsUpdate = true;
@@ -839,6 +911,7 @@ async function boot() {
       if (S.mapOpen) hud.drawBigMap(car, game, airport, net);
       if (S.tabOnline && frames % 20 === 0) renderOnline();
       $('hudRoot').classList.toggle('flightmode', S.mode === 'flight' || S.mode === 'spot');
+      $('hudRoot').classList.toggle('onfoot', !!S.onFoot);
     }
   }
   loop();

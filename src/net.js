@@ -93,8 +93,14 @@ export class Net {
     this.onChat && this.onChat(this.name, text, true);
   }
 
+  // send money / a private message to another online player
+  sendMoney(to, amount) { this._push('pay', { i: this.id, n: this.name, to, a: Math.round(amount) }); }
+  dm(to, text) { this._push('dm', { i: this.id, n: this.name, to, m: String(text).slice(0, 200) }); }
+
   _recv(ev, p) {
     if (!p || p.i === this.id) return;
+    if (ev === 'pay') { if (p.to === this.id && p.a > 0 && p.a <= 1e6) this.onPay && this.onPay(p.n, p.a, p.i); return; }
+    if (ev === 'dm') { if (p.to === this.id) this.onDM && this.onDM(p.n, p.m, p.i); return; }
     if (ev === 's') {
       let r = this.players.get(p.i);
       if (!r) r = this._add(p);
@@ -206,6 +212,6 @@ export class Net {
   }
 
   list() {
-    return [...this.players.values()].map(r => ({ name: r.name, money: r.money || 0, job: r.job, car: r.type, x: r.x, z: r.z }));
+    return [...this.players.values()].map(r => ({ id: r.id, name: r.name, money: r.money || 0, job: r.job, car: r.type, x: r.x, z: r.z }));
   }
 }

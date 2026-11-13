@@ -397,7 +397,7 @@ export class HUD {
   showFine(f) {
     const el = $('fine');
     $('fineKind').textContent = f.kind.toUpperCase();
-    $('fineAmt').textContent = '−' + fmt(f.amount) + ' coins';
+    $('fineAmt').textContent = '−' + fmt(f.amount) + ' сом';
     $('fineDetail').textContent = f.detail;
     $('fineTime').textContent = f.time + ' · Bishkek "Safe City" camera';
     const img = $('finePhoto');
@@ -411,7 +411,7 @@ export class HUD {
     $('discName').textContent = p.name;
     $('discLocal').textContent = p.local || '';
     $('discFact').textContent = p.fact;
-    $('discCount').textContent = `Landmark ${n}/${total} · +500 coins`;
+    $('discCount').textContent = `Landmark ${n}/${total} · +500 сом`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
     clearTimeout(this._discTo); this._discTo = setTimeout(() => el.classList.remove('show'), 7000);
   }

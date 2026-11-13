@@ -51,7 +51,10 @@ export const PLACES = [
 export class Game {
   constructor(map, hud, audio) {
     this.map = map; this.hud = hud; this.audio = audio;
-    this.money = 3000;
+    this.money = 1500;   // cash in the wallet
+    this.bank = 5000;    // MBank account
+    this.tx = [];        // bank transactions
+    this.messages = [];  // phone inbox
     this.fines = [];
     this.speedState = { armed: true, over: 0, lastFine: -100, maxSpeed: 0 };
     this.redCooldown = 0;
@@ -85,15 +88,42 @@ export class Game {
   _load() {
     try {
       const s = JSON.parse(localStorage.getItem('bishkekDrive') || 'null');
-      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; this.custom = s.custom; this.upgrades = s.upgrades; }
+      if (s) { this.money = s.money ?? this.money; this.visited = new Set(s.visited || []); this.fines = s.fines || []; this.savedCar = s.car; this.savedColor = s.color; this.owned = s.owned; this.jobsDone = s.jobs || 0; this.custom = s.custom; this.upgrades = s.upgrades; this.bank = s.bank ?? this.bank; this.tx = s.tx || []; this.messages = s.messages || []; this.rent = s.rent || null; this.rentDay = s.rentDay; this.carRent = s.carRent || null; }
     } catch (e) { /* storage unavailable */ }
   }
   save(car) {
-    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades })); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('bishkekDrive', JSON.stringify({ money: this.money, visited: [...this.visited], fines: this.fines.slice(-30), car: this.homeCar || car?.type, color: this.homeColor ?? car?.color, owned: [...(this.owned || ['sedan'])], jobs: this.jobsDone || 0, custom: this.custom, upgrades: this.upgrades, bank: this.bank, tx: this.tx.slice(-60), messages: this.messages.slice(-80), rent: this.rent, rentDay: this.rentDay, carRent: this.carRent })); } catch (e) { /* ignore */ }
+  }
+
+  // ---- money: cash (wallet) vs MBank account
+  credit(amount, label, toBank = false) {
+    amount = Math.round(amount);
+    if (toBank) { this.bank += amount; this.tx.push({ t: Date.now(), a: amount, l: label }); this.msg('MBank', `+${fmt(amount)} сом · ${label}. Баланс: ${fmt(this.bank)} сом`, '🏦', true); }
+    else this.money += amount;
+  }
+  // pay by card from MBank (falls back to cash). Returns false if you can't afford it
+  spend(amount, label) {
+    amount = Math.round(amount);
+    if (this.bank >= amount) { this.bank -= amount; this.tx.push({ t: Date.now(), a: -amount, l: label }); return true; }
+    if (this.money >= amount) { this.money -= amount; return true; }
+    return false;
+  }
+  // charges that must be paid (fines, rent) – the account may go negative
+  charge(amount, label) {
+    amount = Math.round(amount);
+    this.bank -= amount; this.tx.push({ t: Date.now(), a: -amount, l: label });
+  }
+  msg(from, text, icon = '💬', quiet = false) {
+    const m = { from, text, icon, t: Date.now(), clock: this.hud.clockText(), read: false };
+    this.messages.push(m);
+    if (this.messages.length > 120) this.messages.shift();
+    this.onMessage && this.onMessage(m, quiet);
+    return m;
   }
 
   issueFine(kind, amount, detail, photo, heat = 0) {
-    this.money -= amount;
+    this.charge(amount, 'Штраф: ' + kind);
+    this.msg('Коопсуз шаар · Safe City', `Штраф ${fmt(amount)} сом – ${detail}. Списано с MBank.`, '📸', true);
     const f = { kind, amount, detail, time: this.hud.clockText(), photo, heat };
     this.fines.push(f);
     this.audio.fine();
@@ -331,7 +361,7 @@ export class Game {
         const total = M.fare + bonus;
         this.money += total;
         this.audio.cash();
-        this.hud.toast(`Fare paid: ${fmt(M.fare)} coins. Rahmat!`, 5);
+        this.hud.toast(`Fare paid: ${fmt(M.fare)} сом. Rahmat!`, 5);
         this.mission = null;
         this.clearRoute();
       }

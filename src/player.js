@@ -345,7 +345,7 @@ export class PlayerCar {
       if (w.front) w.pivot.rotation.y = this.steer;
     }
     this.brakeMat.opacity = this.braking ? 0.75 : (this.night ? 0.12 : 0);
-    this.lightMat.emissiveIntensity = this.night ? 2.2 : (this.braking ? 1.2 : 0.3);
+    this.lightMat.emissiveIntensity = this.night ? (this.braking ? 1.6 : 0.8) : (this.braking ? 1.2 : 0.25);
     this.flareMat.opacity = this.night ? 0.55 : 0;
     this.spot.intensity = this.night ? 60 : 0;
     // skid marks + smoke

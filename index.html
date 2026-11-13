@@ -65,6 +65,7 @@
   #miniZoom { position: absolute; left: 150px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; }
   #miniZoom button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(10,14,20,.75); color: #fff; font-weight: 800; font-size: 16px; padding: 0; }
   .nomini #miniZoom { display: none; }
+  .onfoot #speedo, .onfoot #limit, .onfoot #nitroBox { display: none; }
   #toast { position: absolute; bottom: 196px; left: 50%; transform: translateX(-50%) translateY(10px); max-width: min(560px, 90vw); text-align: center; font-size: 14px; opacity: 0; transition: .35s; }
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #hint { position: absolute; bottom: 236px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0; transition: .2s; }
@@ -182,6 +183,58 @@
   #intro .ig div { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
   #intro .ig span { font-size: 34px; } #intro .ig b { display: block; font-size: 17px; margin: 6px 0 4px; } #intro .ig small { color: #a9bccd; font-size: 13px; line-height: 1.45; }
   #intro .bigBtn { padding: 14px 48px; }
+
+  /* ---------- top buttons ---------- */
+  #topBtns { position: absolute; right: 14px; top: 54px; display: flex; gap: 8px; pointer-events: auto; }
+  #topBtns button { position: relative; width: 54px; height: 54px; border-radius: 16px; border: 1px solid rgba(255,255,255,.14); background: rgba(10,13,18,.68); color: #fff; font-size: 22px; backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  #topBtns button small { font-size: 9px; margin-top: 3px; color: #b8c6d4; font-weight: 600; }
+  #topBtns button:hover { background: rgba(30,40,55,.85); }
+  #phBadge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font: 700 11px Inter, Arial; font-style: normal; display: none; align-items: center; justify-content: center; padding: 0 4px; }
+  #wanted { top: 116px !important; } #bustBox { top: 148px !important; } #fps { top: 160px !important; }
+  #minimap { pointer-events: auto; cursor: pointer; }
+  #jailBox { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); background: rgba(20,20,26,.88); border: 2px solid #c8102e; border-radius: 14px; padding: 10px 18px; text-align: center; display: none; }
+  #jailBox.show { display: block; } #jailBox b { font-size: 26px; color: #ff6a6a; display: block; }
+  /* ---------- phone ---------- */
+  #phone { position: fixed; right: 18px; bottom: -700px; width: 310px; height: 620px; z-index: 44; transition: bottom .45s cubic-bezier(.2,1.2,.4,1); }
+  #phone.on { bottom: 18px; }
+  .ph-frame { position: relative; width: 100%; height: 100%; border-radius: 44px; background: #0b0d10; padding: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 2px #2a2e34; }
+  .ph-notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 92px; height: 24px; border-radius: 14px; background: #000; z-index: 3; }
+  .ph-bar { position: absolute; top: 18px; left: 34px; right: 30px; display: flex; justify-content: space-between; font: 600 11px Inter, Arial; color: #fff; z-index: 2; }
+  #phBody { position: absolute; inset: 12px; border-radius: 34px; overflow: auto; padding: 46px 14px 54px; background: linear-gradient(180deg, #1c3d5c 0%, #4f7ea3 45%, #c9d8e4 75%, #ebe6dc 100%); color: #fff; }
+  #phBody::-webkit-scrollbar { display: none; }
+  #phHome { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 110px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.8); cursor: pointer; z-index: 3; }
+  .ph-clock { text-align: center; font-size: 54px; font-weight: 300; margin-top: 10px; text-shadow: 0 2px 10px rgba(0,0,0,.3); }
+  .ph-date { text-align: center; font-size: 13px; margin-bottom: 26px; opacity: .9; text-transform: capitalize; }
+  .ph-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 6px; }
+  .ph-app { position: relative; background: none; border: 0; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; }
+  .ph-app span { width: 54px; height: 54px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+  .ph-app small { font-size: 11px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .ph-app .bdg { position: absolute; top: -4px; right: 4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; font: 700 11px Inter; font-style: normal; display: none; align-items: center; justify-content: center; }
+  .ph-head { display: flex; align-items: center; gap: 8px; margin: -6px -4px 12px; position: sticky; top: -46px; padding: 6px 0; }
+  .ph-head b { font-size: 20px; } .ph-back { background: rgba(255,255,255,.2); border: 0; color: #fff; width: 32px; height: 32px; border-radius: 50%; font-size: 22px; line-height: 1; }
+  #phBody:has(.ph-head) { background: #f2f3f5; color: #111; }
+  #phBody:has(.ph-head) .ph-back { background: #e3e6ea; color: #111; }
+  .ph-sec { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #6b7785; margin: 14px 0 6px; }
+  .ph-muted { font-size: 12px; color: #6b7785; }
+  .mb-card { background: linear-gradient(135deg, #0f8f6a, #13b585); color: #fff; border-radius: 18px; padding: 16px; box-shadow: 0 8px 20px rgba(17,163,127,.35); }
+  .mb-bal { font-size: 30px; font-weight: 800; margin: 6px 0; } .mb-bal.neg { color: #ffd0d0; }
+  .mb-row { display: flex; gap: 6px; margin-top: 10px; } .mb-row button { flex: 1; border: 0; border-radius: 12px; padding: 10px 4px; background: #fff; font: 600 12px Inter; color: #0f8f6a; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+  .mb-tr { display: flex; gap: 6px; } .mb-tr select, .mb-tr input { flex: 1; min-width: 0; border: 1px solid #d6dbe0; border-radius: 10px; padding: 9px; font: 13px Inter; color: #111; background: #fff; }
+  .mb-tr button { border: 0; border-radius: 10px; background: #11a37f; color: #fff; font-weight: 800; width: 44px; }
+  .mb-tx div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 7px 0; border-bottom: 1px solid #e3e6ea; } .mb-tx .neg { color: #d33; } .mb-tx .pos { color: #11a37f; }
+  .ms-th button, .ms-on button { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; background: #fff; border-radius: 14px; padding: 9px 10px; margin-bottom: 6px; color: #111; font: 13px Inter; position: relative; }
+  .ms-th .av { width: 38px; height: 38px; border-radius: 50%; background: #e8ecf0; display: flex; align-items: center; justify-content: center; font-size: 18px; flex: none; }
+  .ms-th small { display: block; color: #6b7785; font-size: 11px; margin-top: 2px; } .ms-th i { position: absolute; right: 10px; top: 12px; background: #ff3b30; color: #fff; font: 700 11px Inter; font-style: normal; border-radius: 9px; padding: 1px 6px; }
+  .ms-list { display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow: auto; margin-bottom: 8px; }
+  .ms-b { align-self: flex-start; max-width: 85%; background: #fff; border-radius: 16px 16px 16px 4px; padding: 8px 11px; font-size: 13px; line-height: 1.35; } .ms-b.me { align-self: flex-end; background: #25c26a; color: #fff; border-radius: 16px 16px 4px 16px; }
+  .ms-b small { display: block; font-size: 10px; opacity: .6; margin-top: 3px; text-align: right; }
+  .rt { background: #fff; border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; } .rt.on { box-shadow: 0 0 0 2px #e85d3a; }
+  .rt small { display: block; color: #6b7785; font-size: 11px; margin: 3px 0 6px; } .rt div { display: flex; justify-content: space-between; align-items: center; gap: 6px; } .rt span { font-weight: 700; color: #e85d3a; }
+  .rt button { border: 0; border-radius: 10px; background: #e85d3a; color: #fff; font: 700 12px Inter; padding: 7px 12px; }
+  .rd button { display: block; width: 100%; text-align: left; border: 0; background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 6px; font: 600 14px Inter; color: #111; }
+  .rd button.on { background: #d63384; color: #fff; } .rd small { display: block; font-weight: 400; font-size: 11px; opacity: .7; }
+  #toast.msg { text-align: left; }
+  @media (max-width: 720px) { #phone { right: 50%; transform: translateX(50%); width: 92vw; height: 78vh; } #topBtns button { width: 46px; height: 46px; font-size: 18px; } }
   #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .7s; z-index: 60; }
   #fade.on { opacity: 1; }
   #flightHud { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; font-size: 13px; }
@@ -221,6 +274,8 @@
   <div id="coins" class="pill"><i></i><span id="money">0</span></div>
   <div id="mission" class="pill"></div>
   <div id="clock" class="pill">08:30</div>
+  <div id="topBtns"><button id="bMap" title="Map (M)">🗺<small>Map</small></button><button id="bPhone" title="Phone (P)">📱<small>Phone</small><i id="phBadge"></i></button><button id="bMenu" title="Menu (Esc)">☰<small>Menu</small></button></div>
+  <div id="jailBox"></div>
   <div id="street"></div>
   <div id="warn"></div>
   <div id="wanted"></div>
@@ -263,7 +318,7 @@
     </div>
     <div class="body">
       <div class="page on" id="pJobs">
-        <p class="muted" style="margin-top:0">Work to earn coins. Fines for speeding over 150 km/h, red lights and wrong-way driving are paid in coins too.</p>
+        <p class="muted" style="margin-top:0">Work to earn money (сом). Fines for speeding over 150 km/h, red lights and wrong-way driving come from your MBank account.</p>
         <div class="cards" id="jobCards"></div>
         <div id="jobNow" class="muted" style="margin-top:12px"></div>
         <h4>Street races</h4>
@@ -289,7 +344,7 @@
           <div><kbd>Space</kbd> handbrake</div><div><kbd>Shift</kbd> nitro (drift to refill)</div><div><kbd>F</kbd> get out / in · steal cars</div><div><kbd>Q</kbd> radio</div><div><kbd>X</kbd><kbd>Z</kbd> gear up / down (manual)</div>
           <div><kbd>H</kbd> horn</div><div><kbd>C</kbd> camera · <kbd>RMB</kbd> look around</div>
           <div><kbd>J</kbd> jobs</div><div><kbd>M</kbd> map &amp; GPS</div>
-          <div><kbd>E</kbd> interact (airport)</div><div><kbd>R</kbd> reset car</div>
+          <div><kbd>E</kbd> interact (airport, home)</div><div><kbd>P</kbd> phone · <kbd>B</kbd> pay bail</div><div><kbd>R</kbd> reset car</div>
           <div><kbd>Enter</kbd> chat · <kbd>Tab</kbd> players</div><div><kbd>[</kbd><kbd>]</kbd> time of day</div>
           <div><kbd>F1</kbd> hide HUD</div><div><kbd>Esc</kbd> menu</div>
         </div>
@@ -317,7 +372,7 @@
       <h2 style="margin:0 0 10px">✈ Manas International Airport</h2>
       <table id="fids"></table>
       <div class="cards" style="margin-top:12px">
-        <button class="card" id="apFlight"><div class="ic">🛫</div><b>Scenic flight</b><small>Take off, fly over Bishkek and the mountains, land back</small><div class="price">500 coins</div></button>
+        <button class="card" id="apFlight"><div class="ic">🛫</div><b>Scenic flight</b><small>Take off, fly over Bishkek and the mountains, land back</small><div class="price">500 сом</div></button>
         <button class="card" id="apSpot"><div class="ic">📷</div><b>Watch a landing</b><small>From the runway fence</small></button>
         <button class="card" id="apTaxi"><div class="ic">🚕</div><b>Airport taxi</b><small>Drive an arriving passenger into the city</small></button>
       </div>
@@ -328,13 +383,14 @@
 
 <div id="boarding"><div class="l"><h4>BOARDING PASS</h4><div class="big">FRU → FRU</div><div>Flight AT 1991 · Scenic flight over Bishkek</div><div style="margin-top:8px;font-size:12px;color:#666">Gate 3 · Seat 12A (window)</div></div><div class="r"><div style="font-size:11px">SEAT</div><div class="big" style="color:#fff">12A</div></div></div>
 <div id="fade"></div>
+<div id="phone"><div class="ph-frame"><div class="ph-notch"></div><div class="ph-bar"><span id="phTime">08:30</span><span>KG 4G · 🔋 87%</span></div><div id="phBody"></div><div id="phHome"></div></div></div>
 <div id="intro" class="hidden">
   <h2>How to play</h2>
   <div class="ig">
-    <div><span>🪙</span><b>Earn coins</b><small>Press <kbd>J</kbd> – work as a taxi, bus or marshrutka driver, or courier</small></div>
+    <div><span>💵</span><b>Earn money</b><small>Press <kbd>J</kbd> – work as a taxi, bus or marshrutka driver, or courier</small></div>
     <div><span>🗺</span><b>Explore Bishkek</b><small>Press <kbd>M</kbd> and search any street, shop, café or landmark</small></div>
     <div><span>🚨</span><b>Police chases</b><small>Crash into cars or speed and the police come. Lose them or get <b style="color:#ff4a4a">BUSTED</b></small></div>
-    <div><span>🚗</span><b>Buy cars</b><small>Spend coins in the Garage (<kbd>Esc</kbd>). Repair damage there too</small></div>
+    <div><span>🚗</span><b>Buy cars</b><small>Spend money in the Garage (<kbd>Esc</kbd>). Repair damage there too</small></div>
   </div>
   <button class="bigBtn" id="introGo">LET'S GO</button>
 </div>
