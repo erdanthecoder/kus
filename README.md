@@ -1,4 +1,6 @@
-# Bishkek Drive 🇰🇬
+# BskDrive · Bishkek Drive 🇰🇬
+
+**Play now:** https://raw.githack.com/erdanthecoder/kus/claude/festive-shannon-42kaix/index.html
 
 An open-world driving game set on the **real streets of Bishkek, Kyrgyzstan**, running in the browser (Three.js / WebGL).
 
@@ -14,6 +16,22 @@ python3 -m http.server 8080
 ```
 
 (Opening the file directly with `file://` also works in most browsers, because the data is loaded with a plain `<script>` tag.)
+
+## New in BskDrive
+
+- **Online multiplayer:** every player in Bishkek sees the others live, with name tags, chat (Enter), an online leaderboard (Tab) and car-to-car collisions. Runs on Supabase Realtime.
+- **Jobs that earn coins:** taxi driver; city bus or marshrutka driver on routes through real bus stops, where passengers walk to the door and board; and courier deliveries from real shops and cafés. Spend the coins on cars in the Garage.
+- **Whole city:** 135,000 real buildings, real shop and cafe signboards (3,700 names from OSM) and real building colours.
+- **More realistic graphics:** leafy trees, detailed facades (balconies, AC units, window frames, curtains), roof parapets, clouds, bloom, colour grading and rounded car bodies.
+- **New handling:** load transfer, progressive tyre grip, ABS, traction control, stability control and counter-steer assist, with automatic or manual gears.
+- **Settings:** graphics preset, resolution, view distance, shadows, bloom, anti-aliasing, field of view, traffic, pedestrians, day speed, steering sensitivity, assists, minimap, volume and player name.
+- **Minimal HUD:** F1 hides it completely.
+
+## Hosting
+
+- **GitHub (works now):** the raw.githack link above.
+- **GitHub Pages:** the `.github/workflows/pages.yml` workflow is ready. Enable it once under Settings → Pages → Source: *GitHub Actions*.
+- **Firebase (`bskdrive.web.app`):** `firebase.json`, `.firebaserc` and the `.github/workflows/firebase-hosting.yml` workflow are ready. Create a Firebase project with the ID `bskdrive` and add the repository secret `FIREBASE_SERVICE_ACCOUNT`, or run `npx firebase-tools deploy` once.
 
 ## Features
 
